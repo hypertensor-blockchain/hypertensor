@@ -16,7 +16,8 @@
         "authorities": [
           "5FtAdTm1ZFuyxuz39mWFZaaDF8925Pu62SvuF7svMQMSCcPF",
           "5H9PKdBA6iosSyYbNfSqdn53DHjpKbrd1iefVq3bKjb6B2xj",
-          "5H9RSMNvs9428STJbR8NAoRZVTQ5pV7Yzzk59ejn8tx6MBmZ"
+          "5H9RSMNvs9428STJbR8NAoRZVTQ5pV7Yzzk59ejn8tx6MBmZ",
+          "5FnWN89SPQ3PeM77JF543i4GM3UyXNC97j3tjFLL6zLFhkJi"
         ]
       },
       "grandpa": {
@@ -31,6 +32,10 @@
           ],
           [
             "5CXdg94zdMz15EY4ZJUj6ybMcH7e93aQqSAEtshaoP6wUTqg",
+            1
+          ],
+          [
+            "5GMRT4i4HjmygtqyVpCprQVbtFsGZGaEv8vystG9QLB8gciX",
             1
           ]
         ]
