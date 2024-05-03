@@ -1,0 +1,33 @@
+[package]
+name = "network-custom-rpc"
+version = "0.0.1"
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+license = "Apache-2.0"
+homepage = "https://substrate.io"
+repository = "https://github.com/paritytech/substrate/"
+description = "RPC runtime API for transaction payment FRAME pallet"
+readme = "README.md"
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
+jsonrpsee = { version = "0.16.2", features = ["client-core", "server", "macros"], default-features = false }
+serde = { version = "1.0.132", features = ["derive"], default-features = false }
+
+# Substrate packages
+sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" , default-features = false }
+sp-blockchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" , default-features = false }
+sp-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" , default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v1.0.0" , default-features = false }
+
+# Local
+network-custom-rpc-runtime-api = { version = "0.0.1", path = "../runtime-api", default-features = false }
+pallet-network = { version = "4.0.0-dev", path = "../../network", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+  "sp-api/std",
+  "sp-runtime/std",
+  "network-custom-rpc-runtime-api/std"
+]
