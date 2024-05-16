@@ -360,10 +360,6 @@ pub mod pallet {
 			initialized: 0,
 		};
 	}
-	// #[pallet::type_value]
-	// pub fn DefaultConsensusType<T: Config>() -> ConsensusType {
-	// 	return ConsensusType::Null
-	// }
 	#[pallet::type_value]
 	pub fn DefaultConsensusSubmissionData<T: Config>() -> ConsensusSubmissionDataParams<ConsensusType> {
 		return ConsensusSubmissionDataParams {
@@ -374,22 +370,23 @@ pub mod pallet {
 	/// Must be greater than MinRequiredPeerConsensusSubmitEpochs
 	#[pallet::type_value]
 	pub fn DefaultMinRequiredModelConsensusSubmitEpochs<T: Config>() -> u64 {
-		6
+		4
 	}
+	/// Must be less than MinRequiredPeerConsensusSubmitEpochs
+	#[pallet::type_value]
+	pub fn DefaultMinRequiredPeerConsensusInclusionEpochs<T: Config>() -> u64 {
+		2
+	}	
 	/// Must be less than MinRequiredModelConsensusSubmitEpochs
 	/// Must be greater than MinRequiredPeerConsensusInclusionEpochs
 	#[pallet::type_value]
 	pub fn DefaultMinRequiredPeerConsensusSubmitEpochs<T: Config>() -> u64 {
 		3
 	}
-	/// Must be less than MinRequiredPeerConsensusSubmitEpochs
-	#[pallet::type_value]
-	pub fn DefaultMinRequiredPeerConsensusInclusionEpochs<T: Config>() -> u64 {
-		2
-	}
+	// Testnet 30 mins per epoch
 	#[pallet::type_value]
 	pub fn DefaultConsensusBlocksInterval<T: Config>() -> u64 {
-		20
+		100
 	}
 	#[pallet::type_value]
 	pub fn DefaultModelPeersInitializationEpochs<T: Config>() -> u64 {
@@ -401,23 +398,24 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultMinRequiredUnstakeEpochs<T: Config>() -> u64 {
-		10
-	}
-	#[pallet::type_value]
-	pub fn DefaultMinModelPeers<T: Config>() -> u32 {
 		12
 	}
 	#[pallet::type_value]
+	pub fn DefaultMinModelPeers<T: Config>() -> u32 {
+		2
+	}
+	#[pallet::type_value]
 	pub fn DefaultMaxModelPeers<T: Config>() -> u32 {
-		255
+		96
 	}
 	#[pallet::type_value]
 	pub fn DefaultMaxModels<T: Config>() -> u32 {
-		10
+		32
 	}
 	#[pallet::type_value]
 	pub fn DefaultModelPerPeerInitCost<T: Config>() -> u128 {
-		28e+18 as u128
+		// 28e+18 as u128
+		0 as u128
 	}
 	#[pallet::type_value]
 	pub fn DefaultTxRateLimit<T: Config>() -> u64 {
@@ -441,7 +439,7 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultMaxStakeBalance<T: Config>() -> u128 {
-		1000000000000000000000000
+		280000000000000000000000
 	}
 	#[pallet::type_value]
 	pub fn DefaultMinStakeBalance<T: Config>() -> u128 {
@@ -453,7 +451,7 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultMaxModelRewardsWeight<T: Config>() -> u128 {
-		4000
+		4800
 	}	
 	#[pallet::type_value]
 	pub fn DefaultModelPeerConsensusPercentRequirement<T: Config>() -> u8 {
@@ -465,6 +463,7 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultMaximumOutlierDeltaPercent<T: Config>() -> u8 {
+		// @to-do: Update to u128 (10000 == 100.00) for accuracy
 		1
 	}
 	#[pallet::type_value]
@@ -520,11 +519,14 @@ pub mod pallet {
 		2
 	}
 	
-	#[pallet::storage] // model_path => boolean
+	/// If model is activate for rewards or general blockchain interfacing
+	// model_path => boolean
+	#[pallet::storage]
 	pub type ModelActivated<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, bool>;
 
+	/// Max models at any given time
 	#[pallet::storage]
-	#[pallet::getter(fn max_models)] // max models at any given time
+	#[pallet::getter(fn max_models)]
 	pub type MaxModels<T> = StorageValue<_, u32, ValueQuery, DefaultMaxModels<T>>;
 
 	// Ensures no duplicate model paths within the network at one time
@@ -535,11 +537,13 @@ pub mod pallet {
 	#[pallet::getter(fn models_v3)] // model_path --> model_id
 	pub type ModelPaths<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, u32>;
 
-	// Stores by a unique id
+	/// Mapping of each model stored by ID, uniqued by `ModelPaths`
+	// Stores model data by a unique id
 	#[pallet::storage] // model_id => data struct
 	pub type ModelsData<T: Config> = StorageMap<_, Blake2_128Concat, u32, ModelData>;
 
-	// Cost to initialize a new model based on count of current model peers
+	/// Cost to initialize a new model based on count of current model peers
+	// Should be `cost * live_peers_count`
 	// See `get_model_initialization_cost()`
 	#[pallet::storage]
 	pub type ModelPerPeerInitCost<T> = StorageValue<_, u128, ValueQuery, DefaultModelPerPeerInitCost<T>>;
@@ -547,19 +551,21 @@ pub mod pallet {
 	// Percentage of the beginning of an epoch for model peer to exit blockchain storage
 	// At the beginning of each epoch, model peers can exit the blockchain, but only within this time frame
 	// represented as a percentage of the epoch
+	// We only allow peers to update or remove themselves in order to not disrupt the consensus
 	#[pallet::storage]
 	pub type RemoveModelPeerEpochPercentage<T> = StorageValue<_, u128, ValueQuery, DefaultRemoveModelPeerEpochPercentage<T>>;
 
+	/// Count of models
 	#[pallet::storage]
 	#[pallet::getter(fn total_models)]
 	pub type TotalModels<T> = StorageValue<_, u32, ValueQuery>;
 
-	// Amount of epochs for model peers to attach to a model
+	/// Amount of epochs a model has to acquire submittable model peers based on the MinModelPeers
 	// If MinModelPeers is not reached by this time anyone can remove the model
 	#[pallet::storage]
 	pub type ModelPeersInitializationEpochs<T> = StorageValue<_, u64, ValueQuery, DefaultModelPeersInitializationEpochs<T>>;
 
-	// Minimum amount of peers in a model
+	// Minimum amount of peers required per model
 	// required for model activity
 	#[pallet::storage]
 	#[pallet::getter(fn min_model_peers)]
@@ -918,7 +924,7 @@ pub mod pallet {
 		DefaultModelPeerConsecutiveConsensusSent<T>,
 	>;
 	
-	// Epochs required from model initialization to accept consensus submissions
+	// Epochs required from model initialization block to accept consensus submissions
 	// Epochs required based on ConsensusBlocksInterval
 	// Each epoch is ConsensusBlocksInterval
 	// Min required epochs for a model to be in storage for based on initialized
@@ -926,7 +932,7 @@ pub mod pallet {
 	#[pallet::getter(fn min_required_model_consensus_submit_epochs)]
 	pub type MinRequiredModelConsensusSubmitEpochs<T> = StorageValue<_, u64, ValueQuery, DefaultMinRequiredModelConsensusSubmitEpochs<T>>;
 
-	// Epochs required from peer initialization to submit consensus
+	// Epochs required from peer initialization block to submit consensus
 	// Epochs required based on ConsensusBlocksInterval
 	// Each epoch is ConsensusBlocksInterval
 	// This must always be at least 1 epoch
@@ -1056,7 +1062,6 @@ pub mod pallet {
 		pub fn submit_consensus_data(
 			origin: OriginFor<T>,
 			model_id: u32,
-			error: bool,
 			consensus_data: Vec<ModelPeerData>,
 		) -> DispatchResultWithPostInfo {
 			let account_id: T::AccountId = ensure_signed(origin)?;
@@ -1093,6 +1098,7 @@ pub mod pallet {
 				Error::<T>::ModelPeerNotExist
 			);
 
+			// Qualify consensus data submitted
 			let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone());
 			let consensus_data_len = consensus_data.len();
 
@@ -1112,7 +1118,7 @@ pub mod pallet {
 				Error::<T>::ConsensusDataAlreadySubmitted
 			);
 
-			// safe unwrap
+			// safe unwrap after checking if model_id exists
 			let model = ModelsData::<T>::get(model_id.clone()).unwrap();
 			let model_initialized: u64 = model.initialized;
 
@@ -1352,7 +1358,8 @@ pub mod pallet {
 		//
 		// If the ModelConsensusUnconfirmedThreshold is reached consensus will be skipped on the model
 		#[pallet::call_index(1)]
-		#[pallet::weight({0})]
+		#[pallet::weight(T::WeightInfo::unconfirm_consensus_data())]
+		// #[pallet::weight({0})]
 		pub fn unconfirm_consensus_data(
 			origin: OriginFor<T>,
 			model_id: u32,
@@ -1383,6 +1390,47 @@ pub mod pallet {
 				Error::<T>::ModelPeerNotExist
 			);
 			
+			// safe unwrap after checking if model_id exists
+			let model = ModelsData::<T>::get(model_id.clone()).unwrap();
+			let model_initialized: u64 = model.initialized;
+
+			let min_required_model_consensus_submit_epochs = MinRequiredModelConsensusSubmitEpochs::<T>::get();
+
+			// Ensure model has passed required epochs to accept submissions and generate consensus and rewards
+			// We get the eligible start block
+			//
+			// We use this here instead of when initializing the model or peer in order to keep the required time
+			// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+			//
+			// e.g. Can't submit consensus if the following parameters
+			//			• model initialized		0
+			//			• interval 						20
+			//			• epochs							10
+			//			• current block 			199
+			//	eligible block is 200
+			// 	can't submit on 200, 201 based on is_in_consensus_steps()
+			//	can submit between 202-219
+			//	199 is not greater than or equal to 200, revert
+			//
+			// e.g. Can submit consensus if the following parameters
+			//			• model initialized		0
+			//			• interval 						20
+			//			• epochs							10
+			//			• current block 			205
+			//	eligible block is 200
+			// 	can't submit on 200, 201 based on is_in_consensus_steps()
+			//	can submit between 202-219
+			//	205 is not greater than or equal to 200, allow consensus data submission
+			//
+			ensure!(
+				block >= Self::get_eligible_epoch_block(
+					consensus_blocks_interval, 
+					model_initialized, 
+					min_required_model_consensus_submit_epochs
+				),
+				Error::<T>::ModelInitializeRequirement
+			);
+			
 			let account_model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
 
 			// Require submitter meets MinRequiredPeerConsensusSubmitEpochs
@@ -1395,15 +1443,6 @@ pub mod pallet {
 			//
 			// We use this here instead of when initializing the model or peer in order to keep the required time
 			// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
-			// ensure!(
-			// 	block >= Self::get_eligible_epoch_block(
-			// 		consensus_blocks_interval, 
-			// 		submitter_peer_initialized, 
-			// 		min_required_peer_consensus_submit_epochs
-			// 	),
-			// 	Error::<T>::PeerConsensusSubmitEpochNotReached
-			// );
-
 			ensure!(
 				Self::is_epoch_block_eligible(
 					block, 
@@ -1414,6 +1453,27 @@ pub mod pallet {
 				Error::<T>::PeerConsensusSubmitEpochNotReached
 			);
 
+			// Count of eligible to submit consensus data model peers
+			let total_submit_eligible_model_peers: u32 = Self::get_total_submittable_model_peers(
+				model_id.clone(),
+				block,
+				consensus_blocks_interval,
+				min_required_peer_consensus_submit_epochs
+			);
+
+			// By the time a model reaches its minimum required epochs to accept submissions, its required
+			// there are enough peers initialized to submit consensus data.
+			//
+			// Models must be initialized with the minimum amount of peers dedicated to submitting consensus
+			//
+			// Ensure model has minimum required peers to submit consensus data to form consensus
+			// Rewards are only given to theoretically active models
+			let min_model_peers: u32 = MinModelPeers::<T>::get();
+			ensure!(
+				total_submit_eligible_model_peers >= min_model_peers,
+				Error::<T>::ModelPeersMin
+			);
+			
 			// Peer can unconfirm data if:
 			//	1. Has sent in consensus data already as `error: false`
 			//	2. Has NOT already sent in `error: true` when calling `submit_consensus_data()`
@@ -1494,10 +1554,10 @@ pub mod pallet {
 
 			// Ensure max models not reached
 			// Get total live models
-			let total_models: u32 = (ModelsData::<T>::iter().count() + 1).try_into().unwrap();
+			let total_models: u32 = (ModelsData::<T>::iter().count()).try_into().unwrap();
 			let max_models: u32 = MaxModels::<T>::get();
 			ensure!(
-				total_models <= max_models,
+				total_models < max_models,
 				Error::<T>::MaxModels
 			);
 
@@ -1539,6 +1599,7 @@ pub mod pallet {
 
 			// Get total models ever
 			let model_len: u32 = TotalModels::<T>::get();
+			// Start the model_ids at 1
 			let model_id = model_len + 1;
 			
 			let model_data = ModelData {
@@ -1567,6 +1628,7 @@ pub mod pallet {
 		/// Remove a model if the model has been voted out
 		/// This can be done by anyone as long as the required conditions pass
 		#[pallet::call_index(3)]
+		// #[pallet::weight(T::WeightInfo::remove_model())]
 		#[pallet::weight({0})]
 		pub fn remove_model(
 			origin: OriginFor<T>, 
@@ -1692,8 +1754,8 @@ pub mod pallet {
 		// Once you claim the peer_id, no one else can claim it.
 		// After RequiredModelPeerEpochs pass and the peer is in consensus, rewards will be emitted to the account
 		#[pallet::call_index(4)]
-		// #[pallet::weight(T::WeightInfo::add_model_peer())]
-		#[pallet::weight({0})]
+		#[pallet::weight(T::WeightInfo::add_model_peer())]
+		// #[pallet::weight({0})]
 		pub fn add_model_peer(
 			origin: OriginFor<T>, 
 			model_id: u32, 
@@ -1726,10 +1788,10 @@ pub mod pallet {
 			);
 			
 			// Ensure max peers isn't surpassed
-			let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone()) + 1;
+			let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone());
 			let max_model_peers: u32 = MaxModelPeers::<T>::get();
 			ensure!(
-				total_model_peers <= max_model_peers,
+				total_model_peers < max_model_peers,
 				Error::<T>::ModelPeersMax
 			);
 
@@ -1852,7 +1914,8 @@ pub mod pallet {
 
 		/// Update a model peer
 		#[pallet::call_index(5)]
-		#[pallet::weight({0})]
+		#[pallet::weight(T::WeightInfo::update_model_peer())]
+		// #[pallet::weight({0})]
 		pub fn update_model_peer(
 			origin: OriginFor<T>, 
 			model_id: u32, 
@@ -2013,6 +2076,7 @@ pub mod pallet {
 		}
 
 		/// Remove a model peer that has surpassed the max penalties allowed
+		// This is redundant 
 		#[pallet::call_index(7)]
 		#[pallet::weight({0})]
 		pub fn remove_account_model_peers(
@@ -2024,11 +2088,14 @@ pub mod pallet {
 			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
+			// We can skip `can_remove_or_update_model_peer` because no peers in consensus results
+			// will be ineligible accounts
+
 			// Ensure consensus isn't being formed or emissions are being generated
-			ensure!(
-				Self::can_remove_or_update_model_peer(block, consensus_blocks_interval),
-				Error::<T>::InvalidRemoveOrUpdateModelPeerBlock
-			);
+			// ensure!(
+			// 	Self::can_remove_or_update_model_peer(block, consensus_blocks_interval),
+			// 	Error::<T>::InvalidRemoveOrUpdateModelPeerBlock
+			// );
 
 			// Ensure account is not eligible to be a model peer
 			ensure!(
@@ -2358,9 +2425,9 @@ pub mod pallet {
 			// Form peer consensus at the beginning of each epoch on the last epochs data
 			if block >= consensus_blocks_interval && block % consensus_blocks_interval == 0 {
 				Self::form_peer_consensus(block);
-				return Weight::from_parts(38_499_025_000, 6832080)
-					.saturating_add(T::DbWeight::get().reads(3171_u64))
-					.saturating_add(T::DbWeight::get().writes(2011_u64));
+				return Weight::from_parts(207_283_478_000, 22166406)
+					.saturating_add(T::DbWeight::get().reads(18250_u64))
+					.saturating_add(T::DbWeight::get().writes(12002_u64));
 			}
 
 			// Run the block succeeding form consensus
@@ -2374,12 +2441,13 @@ pub mod pallet {
 				let _ = ModelTotalConsensusSubmits::<T>::clear(u32::MAX, None);
 				let _ = ModelConsensusEpochUnconfirmedCount::<T>::clear(u32::MAX, None);				
 
-				return Weight::from_parts(37_324_694_000, 6723567)
-					.saturating_add(T::DbWeight::get().reads(3137_u64))
-					.saturating_add(T::DbWeight::get().writes(3123_u64));
-				}
+
+				return Weight::from_parts(153_488_564_000, 21699450)
+					.saturating_add(T::DbWeight::get().reads(6118_u64))
+					.saturating_add(T::DbWeight::get().writes(6082_u64));
+			}
 	
-			return Weight::from_parts(8_060_000, 1565)
+			return Weight::from_parts(8_054_000, 1638)
 				.saturating_add(T::DbWeight::get().reads(1_u64))
 		}
 
@@ -2405,6 +2473,22 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
+			let min_required_model_consensus_submit_epochs: u64 = MinRequiredModelConsensusSubmitEpochs::<T>::get();
+			let min_required_peer_consensus_submit_epochs: u64 = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
+			let set_min_required_peer_consensus_inclusion_epochs: u64 = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
+
+			let requirement_one: bool = min_required_model_consensus_submit_epochs > min_required_peer_consensus_submit_epochs;
+			let requirement_two: bool = min_required_peer_consensus_submit_epochs > set_min_required_peer_consensus_inclusion_epochs;
+			if !(requirement_one) || !(requirement_two) {
+				log::error!("Build error code 001, check `fn build`");
+				if !(requirement_one) {
+					log::error!("MinRequiredModelConsensusSubmitEpochs is not greater than MinRequiredPeerConsensusSubmitEpochs");
+				}
+				if !(requirement_two) {
+					log::error!("MinRequiredPeerConsensusSubmitEpochs is not greater than MinRequiredPeerConsensusInclusionEpochs");
+				}
+			}
+
 			let model_id = 1;
 
 			let model_data = ModelData {
@@ -2413,73 +2497,74 @@ pub mod pallet {
 				initialized: 0,
 			};
 
+			// Activate model
+			ModelActivated::<T>::insert(self.model_path.clone(), true);
 			// Store unique path
 			ModelPaths::<T>::insert(self.model_path.clone(), model_id.clone());
 			// Store model data
 			ModelsData::<T>::insert(model_id.clone(), model_data.clone());
-
+			// Increase total models count
 			TotalModels::<T>::mutate(|n: &mut u32| *n += 1);
-			StakeVaultBalance::<T>::mutate(|n: &mut u128| *n += 10000000000000000000);
-			ModelActivated::<T>::insert(self.model_path.clone(), true);
 
-			let mut count = 0;
-			for (account_id, model_path, peer_id, ip, port) in &self.model_peers {
-				// for running benchmarks set to `count >= 0`
-				// for testing model validators
-				// 0-100 get balance
-				// 0-50 are peers on initialization
-				if count >= 50 {
-					break
-				}	
+			// StakeVaultBalance::<T>::mutate(|n: &mut u128| *n += 10000000000000000000);
+			// let mut count = 0;
+			// for (account_id, model_path, peer_id, ip, port) in &self.model_peers {
+			// 	// for running benchmarks set to `count >= 0`
+			// 	// for testing model validators
+			// 	// 0-100 get balance
+			// 	// 0-50 are peers on initialization
+			// 	if count >= 50 {
+			// 		break
+			// 	}	
 
-				log::info!("BuildGenesisConfig peer_id: {:?}", peer_id);
+			// 	log::info!("BuildGenesisConfig peer_id: {:?}", peer_id);
 	
-				// version 2
-				let model_peer: ModelPeer<T::AccountId> = ModelPeer {
-					account_id: account_id.clone(),
-					peer_id: peer_id.clone(),
-					ip: ip.clone(),
-					port: port.clone(),
-					initialized: 0,
-				};
-				ModelPeersData::<T>::insert(model_id.clone(), account_id.clone(), model_peer.clone());
+			// 	// version 2
+			// 	let model_peer: ModelPeer<T::AccountId> = ModelPeer {
+			// 		account_id: account_id.clone(),
+			// 		peer_id: peer_id.clone(),
+			// 		ip: ip.clone(),
+			// 		port: port.clone(),
+			// 		initialized: 0,
+			// 	};
+			// 	ModelPeersData::<T>::insert(model_id.clone(), account_id.clone(), model_peer.clone());
 
-				// Insert model peer account to keep peer_ids unique within models
-				ModelPeerAccount::<T>::insert(model_id.clone(), peer_id.clone(), account_id.clone());
+			// 	// Insert model peer account to keep peer_ids unique within models
+			// 	ModelPeerAccount::<T>::insert(model_id.clone(), peer_id.clone(), account_id.clone());
 
-				// let mut model_accounts: BTreeSet<T::AccountId> = ModelAccount::<T>::get(model_id.clone());
-				// let model_account_id: Option<&T::AccountId> = model_accounts.get(&account_id.clone());
-				// model_accounts.insert(account_id.clone());
-				// ModelAccount::<T>::insert(model_id.clone(), model_accounts);
+			// 	// let mut model_accounts: BTreeSet<T::AccountId> = ModelAccount::<T>::get(model_id.clone());
+			// 	// let model_account_id: Option<&T::AccountId> = model_accounts.get(&account_id.clone());
+			// 	// model_accounts.insert(account_id.clone());
+			// 	// ModelAccount::<T>::insert(model_id.clone(), model_accounts);
 
-				let mut model_accounts: BTreeMap<T::AccountId, u64> = ModelAccount::<T>::get(model_id.clone());
-				let model_account: Option<&u64> = model_accounts.get(&account_id.clone());
-				model_accounts.insert(account_id.clone(), 0);
-				ModelAccount::<T>::insert(model_id.clone(), model_accounts);
+			// 	let mut model_accounts: BTreeMap<T::AccountId, u64> = ModelAccount::<T>::get(model_id.clone());
+			// 	let model_account: Option<&u64> = model_accounts.get(&account_id.clone());
+			// 	model_accounts.insert(account_id.clone(), 0);
+			// 	ModelAccount::<T>::insert(model_id.clone(), model_accounts);
 		
-				TotalModelPeers::<T>::mutate(model_id.clone(), |n: &mut u32| *n += 1);
+			// 	TotalModelPeers::<T>::mutate(model_id.clone(), |n: &mut u32| *n += 1);
 
-				// Stake
-				let stake_amount: u128 = 10000000000000000000;
-				AccountModelStake::<T>::insert(
-					account_id.clone(),
-					model_id.clone(),
-					stake_amount,
-				);
+			// 	// Stake
+			// 	let stake_amount: u128 = 10000000000000000000;
+			// 	AccountModelStake::<T>::insert(
+			// 		account_id.clone(),
+			// 		model_id.clone(),
+			// 		stake_amount,
+			// 	);
 		
-				// -- Increase account_id total stake
-				TotalAccountStake::<T>::mutate(account_id.clone(), |n: &mut u128| *n += stake_amount.clone());
+			// 	// -- Increase account_id total stake
+			// 	TotalAccountStake::<T>::mutate(account_id.clone(), |n: &mut u128| *n += stake_amount.clone());
 		
-				// -- Increase total stake overall
-				TotalStake::<T>::mutate(|n: &mut u128| *n += stake_amount.clone());
+			// 	// -- Increase total stake overall
+			// 	TotalStake::<T>::mutate(|n: &mut u128| *n += stake_amount.clone());
 		
-				// -- Increase total model stake
-				TotalModelStake::<T>::mutate(model_id.clone(), |n: &mut u128| *n += stake_amount.clone());
+			// 	// -- Increase total model stake
+			// 	TotalModelStake::<T>::mutate(model_id.clone(), |n: &mut u128| *n += stake_amount.clone());
 
-				AccountModels::<T>::append(account_id.clone(), model_id.clone());
+			// 	AccountModels::<T>::append(account_id.clone(), model_id.clone());
 
-				count += 1;
-			}
+			// 	count += 1;
+			// }
 		}
 	}
 }

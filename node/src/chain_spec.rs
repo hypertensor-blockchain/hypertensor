@@ -16,6 +16,7 @@ use sp_core::OpaquePeerId;
 // use parity_multihash::{encode, Hash, Multihash};
 use sc_network::multiaddr::multihash::Multihash;
 use sc_network::PeerId;
+use sp_core::crypto::Ss58Codec;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -45,6 +46,21 @@ where
 /// Generate an Aura authority key.
 pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
 	(get_from_seed::<AuraId>(s), get_from_seed::<GrandpaId>(s))
+}
+
+pub fn authority_keys_from_ss58(s_aura: &str, s_grandpa: &str) -> (AuraId, GrandpaId) {
+	(
+		aura_from_ss58_addr(s_aura),
+		grandpa_from_ss58_addr(s_grandpa),
+	)
+}
+
+pub fn aura_from_ss58_addr(s: &str) -> AuraId {
+	Ss58Codec::from_ss58check(s).unwrap()
+}
+
+pub fn grandpa_from_ss58_addr(s: &str) -> GrandpaId {
+	Ss58Codec::from_ss58check(s).unwrap()
 }
 
 // fn account(id: u8) -> AccountId {
@@ -130,7 +146,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				// 	get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 				// 	get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				// ],
-				true,
 			)
 		},
 		// Bootnodes
@@ -179,7 +194,52 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				// 	get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 				// 	get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				// ],
-				true,
+			)
+		},
+		// Bootnodes
+		vec![],
+		// Telemetry
+		None,
+		// Protocol ID
+		None,
+		// Properties
+		None,
+		None,
+		// Extensions
+		None,
+	))
+}
+
+// -> Sudo only
+// ./target/release/node-template build-spec --disable-default-bootnode --chain vitalik > vitalikSpec.json
+// ./target/release/node-template build-spec --chain=vitalikSpec.json --raw --disable-default-bootnode > vitalikSpecRaw.json
+pub fn vitalik_testnet_config() -> Result<ChainSpec, String> {
+	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+
+	Ok(ChainSpec::from_genesis(
+		// Name
+		"Vitalik Testnet",
+		// ID
+		"vitalik_testnet",
+		ChainType::Development,
+		move || {
+			vitalik_genesis(
+				wasm_binary,
+				// Initial PoA authorities
+				vec![
+					authority_keys_from_ss58(
+						"5FtAdTm1ZFuyxuz39mWFZaaDF8925Pu62SvuF7svMQMSCcPF",
+						"5Hp4uRdFD8NLXFmBRffS7wzAXnFvWJshR7pBdE9JhBg6Uqdg",
+					),
+					authority_keys_from_ss58(
+						"5H9PKdBA6iosSyYbNfSqdn53DHjpKbrd1iefVq3bKjb6B2xj",
+						"5C4ubi5694TjqSyFXHtAtYmj5d82sRN963h7tnE14cDfKL5x",
+					),
+				],
+				// Sudo account
+				AccountId::from_ss58check("5FtAdTm1ZFuyxuz39mWFZaaDF8925Pu62SvuF7svMQMSCcPF").unwrap(),
+				// Pre-funded accounts
+				(0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>(),
 			)
 		},
 		// Bootnodes
@@ -202,7 +262,6 @@ fn testnet_genesis(
 	initial_authorities: Vec<(AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	_enable_println: bool,
 ) -> RuntimeGenesisConfig {
 	RuntimeGenesisConfig {
 		system: SystemConfig {
@@ -248,5 +307,50 @@ fn testnet_genesis(
 				Some(root_key.clone())
 			},
 		}},
+	}
+}
+
+/// Configure initial storage state for FRAME modules.
+fn vitalik_genesis(
+	wasm_binary: &[u8],
+	initial_authorities: Vec<(AuraId, GrandpaId)>,
+	root_key: AccountId,
+	endowed_accounts: Vec<AccountId>,
+) -> RuntimeGenesisConfig {
+	RuntimeGenesisConfig {
+		system: SystemConfig {
+			// Add Wasm runtime to storage.
+			code: wasm_binary.to_vec(),
+			..Default::default()
+		},
+		balances: BalancesConfig {
+			// Configure endowed accounts with initial balance of 1 << 60.
+			balances: {
+				endowed_accounts.iter().cloned().map(|k| (k, 10000000000000000000000)).collect()
+			},
+		},
+		aura: AuraConfig {
+			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
+		},
+		grandpa: GrandpaConfig {
+			authorities: initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect(),
+			..Default::default()
+		},
+		sudo: SudoConfig {
+			// Assign network admin rights.
+			key: Some(root_key.clone()),
+		},
+		democracy: DemocracyConfig::default(),
+		transaction_payment: Default::default(),
+		network: {
+			NetworkConfig {
+				model_path: "bigscience/bloom-560m".into(),
+				model_peers: vec![],
+				accounts: vec![],
+				blank: {
+					Some(root_key.clone())
+				},
+			}
+		},
 	}
 }

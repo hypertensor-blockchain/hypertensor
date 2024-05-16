@@ -66,10 +66,6 @@ pub mod pallet {
 
     type IncreaseStakeVault: IncreaseStakeVault;
 
-    // /// Fixed reward for block producer.
-    // #[pallet::constant]
-    // type BlockReward: Get<BalanceOf<Self>>;
-
     #[pallet::constant]
     type HalvingInterval: Get<u32>;
 
@@ -101,9 +97,9 @@ pub mod pallet {
   pub enum Event<T: Config> {
     /// Issued reward for the block author.
     BlockReward {
-        block_author: T::AccountId,
-        validator_reward: BalanceOf<T>,
-        model_peers_reward: BalanceOf<T>,
+      block_author: T::AccountId,
+      validator_reward: BalanceOf<T>,
+      model_peers_reward: BalanceOf<T>,
     },
 
     SetValidatorRewardPercent(u32),
@@ -171,9 +167,9 @@ impl<T: Config> Pallet<T> {
     T::Currency::deposit_creating(&block_author, validator_reward);
 
     Self::deposit_event(Event::BlockReward {
-     block_author,
-     validator_reward,
-     model_peers_reward
+      block_author,
+      validator_reward,
+      model_peers_reward
     });
   }
 

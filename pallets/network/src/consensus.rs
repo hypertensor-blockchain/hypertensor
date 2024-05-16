@@ -389,6 +389,9 @@ impl<T: Config> Pallet<T> {
         // If model peer has been against consensus and breaches threshold
         // Then remove that model peer
         //
+        // Consensus expects all peers to be in full consensus and if not an `unconfirm` should
+        // be passed.
+        //
         // e.g. If model peer has been against consensus on this epoch 30% of the results
         //      and the threshold is 25%, then remove that peer
         if let Some(count) = against_consensus_peer_count.get_mut(&account_id.clone()) {

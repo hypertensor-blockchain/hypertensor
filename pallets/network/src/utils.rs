@@ -288,6 +288,15 @@ impl<T: Config> Pallet<T> {
     )
   }
 
+  // @to-do
+  pub fn can_model_accept_consensus_submissions(
+    model_id: u32,
+    block: u64, 
+    interval: u64
+  ) -> bool {
+    true
+  }
+
   // Can a model peel be updated or removed
   //
   // Model peers can update/remove at the beginning of each epoch
@@ -442,9 +451,4 @@ impl<T: Config> Pallet<T> {
 
     total_submit_eligible_model_peers
   }
-
-  pub fn get_min_consensus_submits() {
-    
-  }
-
 }

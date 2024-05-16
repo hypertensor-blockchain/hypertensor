@@ -47,9 +47,13 @@ fn funded_account<T: Config>(name: &'static str, index: u32) -> T::AccountId {
 	let caller: T::AccountId = account(name, index, SEED);
 	// Give the account half of the maximum value of the `Balance` type.
 	// Otherwise some transfers will fail with an overflow error.
-	let deposit_amount: u128 = 10000000000000000000000;
+	let deposit_amount: u128 = get_min_stake_balance::<T>() + 10000;
 	T::Currency::deposit_creating(&caller, deposit_amount.try_into().ok().expect("REASON"));
 	caller
+}
+
+fn get_min_stake_balance<T: Config>() -> u128 {
+	MinStakeBalance::<T>::get()
 }
 
 // increase the blocks past the consensus steps and remove model peer blocks span
@@ -64,7 +68,7 @@ fn make_consensus_data_submittable<T: Config>() {
   let max_remove_model_peer_block = block_can_remove_peer as u64 + (current_block_number - (current_block_number % consensus_blocks_interval));
 
   if current_block_number < max_remove_model_peer_block {
-		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(max_remove_model_peer_block));
+		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(max_remove_model_peer_block + 1));
   }
 }
 
@@ -77,6 +81,25 @@ fn make_model_peer_consensus_data_submittable<T: Config>() {
 	frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(required_block));
 
 	make_consensus_data_submittable::<T>();
+}
+
+fn make_model_peer_removable<T: Config>() {
+  // increase blocks
+  let current_block_number = get_current_block_as_u64::<T>();
+  let model_peer_removal_percentage = RemoveModelPeerEpochPercentage::<T>::get();
+  let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+
+  let block_span_can_remove_peer = (consensus_blocks_interval as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR) as u64;
+
+  let start_removal_block = (CONSENSUS_STEPS + (current_block_number - (current_block_number % consensus_blocks_interval))) as u64;
+
+  let end_removal_block = block_span_can_remove_peer + (current_block_number - (current_block_number % consensus_blocks_interval));
+  
+  if current_block_number < start_removal_block {
+		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(start_removal_block));
+  } else if current_block_number > end_removal_block {
+		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(start_removal_block + consensus_blocks_interval));
+  }
 }
 
 fn make_model_initialized<T: Config>() {
@@ -129,64 +152,6 @@ pub fn get_current_block_as_u64<T: frame_system::Config>() -> u64 {
 }
 
 benchmarks! {
-	submit_consensus_data {
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
-
-		// add model
-		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
-		let caller = funded_account::<T>("caller", 0);
-		whitelist_account!(caller);
-		Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
-		let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
-
-		make_model_initialized::<T>();
-
-		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
-
-		// increase blocks
-		let block = frame_system::Pallet::<T>::block_number();
-		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
-
-		// add model peers
-		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
-		let stake_amount: u128 = 1000;
-		let first_peer_account = funded_account::<T>("peer", 0);
-		let first_peer_id = peer(0);
-		for n in 0..n_peers {
-			let peer_account = funded_account::<T>("peer", n.into());
-			whitelist_account!(peer_account);
-			Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
-    }
-		
-		make_model_peer_consensus_data_submittable::<T>();
-
-		// let block = frame_system::Pallet::<T>::block_number();
-		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
-		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_peer_consensus_submit_epochs));
-
-		// build consensus
-		let model_peer_data = model_peer_data::<T>(0, n_peers);
-
-		// params
-		let total_models = Network::<T>::total_models();
-
-		// increase blocks past consensus steps
-		make_consensus_data_submittable::<T>();
-
-		// let block = frame_system::Pallet::<T>::block_number();
-		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
-	}: submit_consensus_data(RawOrigin::Signed(first_peer_account.clone()), model_id.clone(), false, model_peer_data)
-	verify {
-		assert_eq!(Network::<T>::total_model_peers(total_models), n_peers as u32, "TotalModelPeers incorrect.");
-		let submission = ModelPeerConsensusResults::<T>::iter_key_prefix(total_models);
-		let len = submission.count();
-		assert_eq!(
-			len, 
-			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
-		);
-	}
-
   add_model {
 		let total_models = Network::<T>::total_models();
 
@@ -221,7 +186,7 @@ benchmarks! {
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
 
 		// add model peer params
-		let stake_amount: u128 = 10000000000000000000;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
 		let peer_account = funded_account::<T>("peer", 0);
 		whitelist_account!(peer_account);
 
@@ -232,6 +197,47 @@ benchmarks! {
 		let block = frame_system::Pallet::<T>::block_number();
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
 	}: add_model_peer(RawOrigin::Signed(peer_account), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount)
+	verify {
+		assert_eq!(Network::<T>::total_model_peers(total_models), 1, "TotalModelPeers incorrect.");
+	}
+
+	update_model_peer {
+		// add model
+		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
+		let caller = funded_account::<T>("caller", 0);
+		whitelist_account!(caller);
+		Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+		let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+		
+		make_model_initialized::<T>();
+		
+		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
+
+		// increase blocks past consensus steps
+		let block = frame_system::Pallet::<T>::block_number();
+		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+
+		// add model peer params
+		let stake_amount: u128 = get_min_stake_balance::<T>();
+		let peer_account = funded_account::<T>("peer", 0);
+		whitelist_account!(peer_account);
+
+		// params
+		let total_models = Network::<T>::total_models();
+
+		// increase blocks past consensus steps
+		let block = frame_system::Pallet::<T>::block_number();
+		// log::error!("Block -> {:?}", block);
+
+		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+
+		Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount);
+
+		make_model_peer_consensus_data_submittable::<T>();
+
+		make_model_peer_removable::<T>();
+
+	}: update_model_peer(RawOrigin::Signed(peer_account.clone()), model_id.clone(), peer(1))
 	verify {
 		assert_eq!(Network::<T>::total_model_peers(total_models), 1, "TotalModelPeers incorrect.");
 	}
@@ -253,7 +259,7 @@ benchmarks! {
 		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
 
 		// add model peer
-		let stake_amount: u128 = 1000;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
 		let peer_account = funded_account::<T>("peer", 0);
 		whitelist_account!(peer_account);
 		let __ = Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount);
@@ -283,7 +289,7 @@ benchmarks! {
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
 		
 		// add model peer
-		let stake_amount: u128 = 1000;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
 		let peer_account = funded_account::<T>("peer", 0);
 		whitelist_account!(peer_account);
 		let __ = Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount);
@@ -313,11 +319,13 @@ benchmarks! {
 
 		
 		// add model peer
-		let stake_amount: u128 = 1000;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
 		let peer_account = funded_account::<T>("peer", 0);
 		whitelist_account!(peer_account);
 		let __ = Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount);
 		
+		let add_to_stake_amount: u128 = 1000;
+
 		// params
 		let total_models = Network::<T>::total_models();
 		let account_model_stake = Network::<T>::account_model_stake(peer_account.clone(), total_models.clone());
@@ -326,12 +334,12 @@ benchmarks! {
 		let total_model_stake = Network::<T>::total_model_stake(total_models.clone());
 
 		// expected stake results
-		let expected_account_model_stake = account_model_stake + stake_amount;
-		let expected_total_account_stake = total_account_stake + stake_amount;
-		let expected_total_stake = total_stake + stake_amount;
-		let expected_total_model_stake = total_model_stake + stake_amount;
+		let expected_account_model_stake = account_model_stake + add_to_stake_amount;
+		let expected_total_account_stake = total_account_stake + add_to_stake_amount;
+		let expected_total_stake = total_stake + add_to_stake_amount;
+		let expected_total_model_stake = total_model_stake + add_to_stake_amount;
 
-	}: add_to_stake(RawOrigin::Signed(peer_account.clone()), model_id.clone(), stake_amount)
+	}: add_to_stake(RawOrigin::Signed(peer_account.clone()), model_id.clone(), add_to_stake_amount)
 	verify {
 		assert_eq!(Network::<T>::account_model_stake(peer_account.clone(), total_models.clone()), expected_account_model_stake, "AccountModelStake incorrect.");
 		assert_eq!(Network::<T>::total_account_stake(peer_account.clone()), expected_total_account_stake, "TotalAccountStake incorrect.");
@@ -357,7 +365,7 @@ benchmarks! {
 		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
 
 		// add model peer
-		let stake_amount: u128 = 1000;
+		let stake_amount: u128 = get_min_stake_balance::<T>() + 1000;
 		let peer_account = funded_account::<T>("peer", 0);
 		whitelist_account!(peer_account);
 		let __ = Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount);
@@ -392,6 +400,109 @@ benchmarks! {
 		assert_eq!(Network::<T>::total_model_peers(total_models.clone()), 1, "TotalModelPeers incorrect.");
 	}
 
+	submit_consensus_data {
+		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+
+		// add model
+		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
+		let caller = funded_account::<T>("caller", 0);
+		whitelist_account!(caller);
+		Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+		let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+
+		make_model_initialized::<T>();
+
+		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
+
+		// increase blocks
+		let block = frame_system::Pallet::<T>::block_number();
+		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+
+		// add model peers
+		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
+		let first_peer_account = funded_account::<T>("peer", 0);
+		let first_peer_id = peer(0);
+		for n in 0..n_peers {
+			let peer_account = funded_account::<T>("peer", n.into());
+			whitelist_account!(peer_account);
+			Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
+    }
+		
+		make_model_peer_consensus_data_submittable::<T>();
+
+		// let block = frame_system::Pallet::<T>::block_number();
+		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
+		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_peer_consensus_submit_epochs));
+
+		// build consensus
+		let model_peer_data = model_peer_data::<T>(0, n_peers);
+
+		// params
+		let total_models = Network::<T>::total_models();
+
+		// increase blocks past consensus steps
+		make_consensus_data_submittable::<T>();
+
+		// let block = frame_system::Pallet::<T>::block_number();
+		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+	}: submit_consensus_data(RawOrigin::Signed(first_peer_account.clone()), model_id.clone(), model_peer_data)
+	verify {
+		assert_eq!(Network::<T>::total_model_peers(total_models), n_peers as u32, "TotalModelPeers incorrect.");
+		let submission = ModelPeerConsensusResults::<T>::iter_key_prefix(total_models);
+		let len = submission.count();
+		assert_eq!(
+			len, 
+			n_peers as usize, 
+			"ModelPeerConsensusResults len mismatch."
+		);
+	}
+
+	unconfirm_consensus_data {
+		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+
+		// add model
+		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
+		let caller = funded_account::<T>("caller", 0);
+		whitelist_account!(caller);
+		Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+		let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+
+		make_model_initialized::<T>();
+
+		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
+
+		// increase blocks
+		let block = frame_system::Pallet::<T>::block_number();
+		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+
+		// add model peers
+		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
+		let first_peer_account = funded_account::<T>("peer", 0);
+		let first_peer_id = peer(0);
+		for n in 0..n_peers {
+			let peer_account = funded_account::<T>("peer", n.into());
+			whitelist_account!(peer_account);
+			Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
+    }
+		
+		make_model_peer_consensus_data_submittable::<T>();
+
+		// increase blocks past consensus steps
+		make_consensus_data_submittable::<T>();
+
+	}: unconfirm_consensus_data(RawOrigin::Signed(first_peer_account.clone()), model_id.clone())
+	verify {
+		assert_eq!(Network::<T>::total_model_peers(model_id.clone()), n_peers as u32, "TotalModelPeers incorrect.");
+		let unconfirms = ModelConsensusEpochUnconfirmedCount::<T>::get(model_id.clone());
+		assert_eq!(
+			unconfirms, 
+			1 as u32, 
+			"ModelPeerConsensusResults unconfirms mismatch."
+		);
+	}
+
 	form_consensus_data {
 		// params from genesis
 		let total_models = Network::<T>::total_models();
@@ -416,7 +527,7 @@ benchmarks! {
 
 		// add model peers
 		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
-		let stake_amount: u128 = 1000;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
 		for m in total_models..m_models {
 			let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
 			let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
@@ -451,7 +562,6 @@ benchmarks! {
 				Network::<T>::submit_consensus_data(
 					RawOrigin::Signed(peer_account.clone()).into(), 
 					model_id.clone().into(), 
-					false,
 					model_peer_data.clone()
 				);
 			}
@@ -500,7 +610,7 @@ benchmarks! {
 	// let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
 	// 	// add model peers
 	// 	let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
-	// 	let stake_amount: u128 = 1000;
+	// 	let stake_amount: u128 = get_min_stake_balance::<T>();
 	// 	for n in 0..n_peers {
 	// 		let peer_account = funded_account::<T>("peer", n.into());
 	// 		whitelist_account!(peer_account);
@@ -562,7 +672,7 @@ benchmarks! {
 		
 	// 	// add model peers
 	// 	let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
-	// 	let stake_amount: u128 = 10000000000000000000;
+	// 	let stake_amount: u128 = get_min_stake_balance::<T>();
 	// 	for m in total_models..m_models {
 	// 		let model_path = format!("petals-team-{m}/StableBeluga");
 	// let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
@@ -634,7 +744,7 @@ benchmarks! {
 	// let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
 
 	// 	let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
-	// 	let stake_amount: u128 = 10000000000000000000;
+	// 	let stake_amount: u128 = get_min_stake_balance::<T>();
 	// 	for n in 0..n_peers {
 	// 		let peer_account = funded_account::<T>("peer", n.into());
 	// 		whitelist_account!(peer_account);
@@ -697,7 +807,7 @@ benchmarks! {
 		
 		// add model peers
 		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
-		let stake_amount: u128 = 23000000000000000000;
+		let stake_amount: u128 = get_min_stake_balance::<T>();
 		for m in total_models..m_models {
 			let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
 			let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
@@ -729,7 +839,7 @@ benchmarks! {
 			for n in 0..n_peers {
 				let peer_account = funded_account::<T>("peer", n.into());
 				whitelist_account!(peer_account);
-				Network::<T>::submit_consensus_data(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), false, model_peer_data.clone());		
+				Network::<T>::submit_consensus_data(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), model_peer_data.clone());		
 			}
 			let submission = ModelPeerConsensusResults::<T>::iter_key_prefix(m + 1);
 			let len = submission.count();
@@ -798,71 +908,72 @@ benchmarks! {
 		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
 
 		// use stake amounts that will create models(s) that will be greater than the max weight
+		let min_stake: u128 = get_min_stake_balance::<T>();
 		let amount_stake: Vec<u128> = vec![
-      10000000000000000000,
-      8000000000000000000,
-      200000000000000000,
-      300000000000000000,
-      140000000000000000,
-      120000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
-			10000000000000000000,
-      8000000000000000000,
-      200000000000000000,
-      300000000000000000,
-      140000000000000000,
-      120000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
-			10000000000000000000,
-      8000000000000000000,
-      200000000000000000,
-      300000000000000000,
-      140000000000000000,
-      120000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
-			10000000000000000000,
-      8000000000000000000,
-      200000000000000000,
-      300000000000000000,
-      140000000000000000,
-      120000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
-			10000000000000000000,
-      8000000000000000000,
-      200000000000000000,
-      300000000000000000,
-      140000000000000000,
-      120000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
-			10000000000000000000,
-      8000000000000000000,
-      200000000000000000,
-      300000000000000000,
-      140000000000000000,
-      120000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
-      100000000000000000,
-      200000000000000000,
-      100000000000000000,
-      100000000000000000,
+      min_stake + 1000,
+      min_stake + 800,
+      min_stake + 200,
+      min_stake + 300,
+      min_stake + 14,
+      min_stake + 12,
+      min_stake + 10,
+      min_stake + 200,
+      min_stake + 1,
+      min_stake + 1,
+			min_stake + 1000,
+      min_stake + 800,
+      min_stake + 200,
+      min_stake + 300,
+      min_stake + 14,
+      min_stake + 12,
+      min_stake + 10,
+      min_stake + 200,
+      min_stake + 1,
+      min_stake + 1,
+			min_stake + 1000,
+      min_stake + 800,
+      min_stake + 200,
+      min_stake + 300,
+      min_stake + 14,
+      min_stake + 12,
+      min_stake + 10,
+      min_stake + 200,
+      min_stake + 1,
+      min_stake + 1,
+			min_stake + 1000,
+      min_stake + 800,
+      min_stake + 200,
+      min_stake + 300,
+      min_stake + 14,
+      min_stake + 12,
+      min_stake + 10,
+      min_stake + 200,
+      min_stake + 1,
+      min_stake + 1,
+			min_stake + 1000,
+      min_stake + 800,
+      min_stake + 200,
+      min_stake + 300,
+      min_stake + 14,
+      min_stake + 12,
+      min_stake + 10,
+      min_stake + 200,
+      min_stake + 1,
+      min_stake + 1,
+			min_stake + 1000,
+      min_stake + 800,
+      min_stake + 200,
+      min_stake + 300,
+      min_stake + 14,
+      min_stake + 12,
+      min_stake + 10,
+      min_stake + 1,
+      min_stake + 1,
+      min_stake + 1,
+      min_stake + 1,
+      min_stake + 1,
+      min_stake + 1,
+      min_stake + 1,
     ];
 		let mut amount_staked: u128 = 0;
 
@@ -905,7 +1016,7 @@ benchmarks! {
 			for n in 0..n_peers {
 				let peer_account = funded_account::<T>("peer", n.into());
 				whitelist_account!(peer_account);
-				Network::<T>::submit_consensus_data(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), false, model_peer_data.clone());		
+				Network::<T>::submit_consensus_data(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), model_peer_data.clone());		
 			}
 			let submission = ModelPeerConsensusResults::<T>::iter_key_prefix(m + 1);
 			let len = submission.count();

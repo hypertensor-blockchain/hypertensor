@@ -71,19 +71,25 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		// *** 4. Get total rewards in vault
 		let total_vault_balance: u128 = StakeVaultBalance::<T>::get();
 
+		if total_vault_balance == 0 {
+			return
+		}
+
 		// If ModelPeerConsensusResults has no values it will be returned during `if total_stake == 0` above
 		let consensus_len = ModelPeerConsensusResults::<T>::iter().count();
 
-		if consensus_len == 0 {
-			return
-		}
+		// if consensus_len == 0 {
+		// 	return
+		// }
 
 		// *** 5. Ensure divisible by percentage factor
 		// Peer can have a minimum of 0.01% of rewards on both score and stake balance
 		// We ensure this is divisible by how many peers there are
 		// This isn't perfect but it's a quick way to ensure rewards are distributed properly
 		// without requiring to check values after rewards are distributed
-		if total_vault_balance < (consensus_len as u128).saturating_mul(Self::PERCENTAGE_FACTOR) {
+		// consensus_len / total_vault_balance < 0.01 { return }
+		// consensus_len * 100.00 > total_vault_balance { return }
+		if (consensus_len as u128).saturating_mul(Self::PERCENTAGE_FACTOR) > total_vault_balance {
 			return
 		}
 
@@ -105,12 +111,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		// }
 
 		// -- Track emissions rewarded
-		let mut total_emissions_on_epoch: u128 = 0;
-
-		// Testing variables
-		let mut total_models_rewarded: u8 = 0;
-		let mut total_models_peers_rewarded: u32 = 0;
-		
+		let mut total_emissions_on_epoch: u128 = 0;		
 
 		// *** 10. Iter each model that clear minimum weight and distribute rewards to model validators
 		for model in models_data.iter() {
@@ -151,6 +152,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			// *** 12. Accounts in-consensus must meet minumum required threshold percent during form_peer_consensus()
 			// if not, account.len() will be zero
 			if accounts.len() == 0 {
+				// We don't clear_prefix here because it is already at zero
 				continue
 			}
 
@@ -227,19 +229,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 				total_emissions_on_epoch.saturating_accrue(account_total_emissions);
 			}
-
-			total_models_rewarded += 1;
 		}
-
-		let remaining = total_vault_balance - total_emissions_on_epoch;
-		// log::info!("total_vault_balance             {:?}", total_vault_balance);
-		// log::error!("total_vault_balance             {:?}", total_vault_balance);
-		// log::info!("total_emissions_on_epoch        {:?}", total_emissions_on_epoch);
-		// log::error!("total_emissions_on_epoch        {:?}", total_emissions_on_epoch);
-		// log::info!("remaining                       {:?}", remaining);
-		// log::error!("remaining                       {:?}", remaining);
-		// log::info!("total_models_rewarded           {:?}", total_models_rewarded);
-		// log::info!("total_models_peers_rewarded     {:?}", total_models_peers_rewarded);
 
 		// Decrease stake vault balance
 		StakeVaultBalance::<T>::set(total_vault_balance.saturating_sub(total_emissions_on_epoch));
