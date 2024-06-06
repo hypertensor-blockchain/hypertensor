@@ -63,6 +63,7 @@ impl<T: Config> Pallet<T> {
         model_initialized, 
         min_required_model_consensus_submit_epochs
       ) {
+        log::info!("Model ID {:?} not eligible for consensus yet", model_id.clone());
         continue
       }
 
@@ -85,6 +86,7 @@ impl<T: Config> Pallet<T> {
       // Anyone can manually remove model if certain parameters are met
       let model_consensus_epoch_errors: u32 = ModelConsensusEpochsErrors::<T>::get(model_id.clone());
       if model_consensus_epoch_errors > max_model_consensus_epoch_errors {
+        log::info!("Model ID {:?} surpassed maximum model consensus epoch errors", model_id.clone());
         Self::reset_model_consensus_data_and_results(model_id.clone());
         continue
       }
@@ -114,6 +116,7 @@ impl<T: Config> Pallet<T> {
       // Therefor we continue instead of increasing each accounts penalties count
       if Self::percent_div(model_peer_submits as u128, total_model_peers as u128) < model_peer_consensus_submit_percent_requirement {
         // If enough ModelConsensusEpochsErrors increment, the model can be removed
+        log::info!("Not enough submissions on model ID {:?}", model_id.clone());
         ModelConsensusEpochsErrors::<T>::mutate(model_id.clone(), |n: &mut u32| *n += 1);
         ModelConsecutiveSuccessfulEpochs::<T>::insert(model_id.clone(), 0);
         Self::reset_model_consensus_data_and_results(model_id.clone());
@@ -143,6 +146,7 @@ impl<T: Config> Pallet<T> {
       let unconfirmed_count: u32 = ModelConsensusEpochUnconfirmedCount::<T>::get(model_id.clone());
       let model_consensus_unconfirmed_seq_epochs_count = ModelConsensusUnconfirmedConsecutiveEpochsCount::<T>::get(model_id.clone());
       if Self::percent_div(unconfirmed_count as u128, model_peer_submits as u128) >= model_consensus_unconfirmed_threshold {
+        log::info!("Model ID {:?} consensus data unconfirmed by {:?} model peers", model_id.clone(), unconfirmed_count);
         // Increase the count of unconfirmed epochs in a row
         // This resets every successful epoch
         ModelConsensusUnconfirmedConsecutiveEpochsCount::<T>::mutate(model_id.clone(), |n: &mut u32| *n += 1);
@@ -175,6 +179,7 @@ impl<T: Config> Pallet<T> {
       // or the model didn't initialize enough peers to generate rewards
       // Therefor we continue instead of increasing each accounts penalties count
       if Self::percent_div(model_peer_submit_submissions as u128, total_model_peers as u128) < model_peer_consensus_submit_percent_requirement {
+        log::info!("Not enough consensus submissions for model ID {:?}", model_id.clone());
         ModelConsecutiveSuccessfulEpochs::<T>::insert(model_id.clone(), 0);
         // If enough ModelConsensusEpochsErrors increment, the model can be removed
         ModelConsensusEpochsErrors::<T>::mutate(model_id.clone(), |n: &mut u32| *n += 1);
@@ -188,6 +193,7 @@ impl<T: Config> Pallet<T> {
       // Check if we can less_one model errors based on consecutive successful epochs
       let model_consecutive_successful_epochs = ModelConsecutiveSuccessfulEpochs::<T>::get(model_id.clone());
       if model_consecutive_successful_epochs >= model_consecutive_epochs_threshold && model_consecutive_successful_epochs % model_consecutive_epochs_threshold == 0 {
+        log::info!("Model ID {:?} epoch successful, removing an error", model_id.clone());
         ModelConsensusEpochsErrors::<T>::mutate(model_id.clone(), |n: &mut u32| n.saturating_less_one());
       }
 
@@ -246,6 +252,12 @@ impl<T: Config> Pallet<T> {
           let consensus_result_peer_id: PeerId = peer_consensus_result.peer_id;
 
           // Remove model peer storage and consensus data
+          log::info!(
+            "AccountId {:?} out of consensus through {:?}% in model ID {:?}", 
+            consensus_result_account_id, 
+            removal_consensus_percentage, 
+            model_id
+          );
           Self::do_remove_model_peer(block, model_id.clone(), consensus_result_account_id.clone());
 
           let consensus_result_successful_consensus: Vec<T::AccountId> = peer_consensus_result.successful_consensus;
@@ -260,7 +272,6 @@ impl<T: Config> Pallet<T> {
             } else {
               against_consensus_peer_count.insert(dishonest_account_id.clone(), 1);
             }
-          
             AccountPenaltyCount::<T>::mutate(dishonest_account_id.clone(), |n: &mut u32| *n += 1);
           }	
         } else {
@@ -326,7 +337,6 @@ impl<T: Config> Pallet<T> {
             } else {
               against_consensus_peer_count.insert(dishonest_account_id.clone(), 1);
             }
-
             AccountPenaltyCount::<T>::mutate(dishonest_account_id, |n: &mut u32| *n += 1);
           }
         }
@@ -364,7 +374,6 @@ impl<T: Config> Pallet<T> {
             } else {
               against_consensus_peer_count.insert(account_id.clone(), 1);
             }
-
             AccountPenaltyCount::<T>::mutate(account_id, |n: &mut u32| *n += 1);
           }
           score_index += 1;
@@ -383,34 +392,7 @@ impl<T: Config> Pallet<T> {
       // Instead of checking ModelPeerConsensusResults we check PeerConsensusEpochSubmitted because
       // it hasn't been impacted during forming consensus
       for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-
-        let account_id: T::AccountId = model_peer.account_id;
-
-        // If model peer has been against consensus and breaches threshold
-        // Then remove that model peer
-        //
-        // Consensus expects all peers to be in full consensus and if not an `unconfirm` should
-        // be passed.
-        //
-        // e.g. If model peer has been against consensus on this epoch 30% of the results
-        //      and the threshold is 25%, then remove that peer
-        if let Some(count) = against_consensus_peer_count.get_mut(&account_id.clone()) {
-          let against_percent: u128 = Self::percent_div(*count as u128, consensus_peer_count as u128);
-
-          if against_percent >= peer_against_consensus_removal_threshold {
-            // Remove model peer storage and consensus data
-            Self::do_remove_model_peer(block, model_id.clone(), account_id.clone());
-            continue
-          }
-        }
-
         let peer_initialized: u64 = model_peer.initialized;
-
-        // Check if peer has submitted data
-        let peer_submitted = PeerConsensusEpochSubmitted::<T>::get(model_id.clone(), account_id.clone());
-  
-        // Check if peer unconfirmed
-        let peer_unconfirmed = PeerConsensusEpochUnconfirmed::<T>::get(model_id.clone(), account_id.clone());
 
         // Ensure account could have submitted consensus data on the allotted submission blocks
         // If not, increase AccountPenaltyCount
@@ -440,7 +422,42 @@ impl<T: Config> Pallet<T> {
           peer_initialized, 
           min_required_peer_consensus_submit_epochs
         );
-  
+
+        if !can_submit {
+          continue
+        }
+
+        let account_id: T::AccountId = model_peer.account_id;
+
+        // If model peer has been against consensus and breaches threshold
+        // Then remove that model peer
+        //
+        // Consensus expects all peers to be in full consensus and if not an `unconfirm` should
+        // be passed.
+        //
+        // e.g. If model peer has been against consensus on this epoch 30% of the results
+        //      and the threshold is 25%, then remove that peer
+        if let Some(count) = against_consensus_peer_count.get_mut(&account_id.clone()) {
+          let against_percent: u128 = Self::percent_div(*count as u128, consensus_peer_count as u128);
+
+          if against_percent >= peer_against_consensus_removal_threshold {
+            // Remove model peer storage and consensus data
+            log::info!(
+              "AccountId {:?} against consensus at {:?}% in model ID {:?}", 
+              account_id, 
+              against_percent,
+              model_id
+            );
+            Self::do_remove_model_peer(block, model_id.clone(), account_id.clone());
+          }
+        }
+
+        // Check if peer has submitted data
+        let peer_submitted = PeerConsensusEpochSubmitted::<T>::get(model_id.clone(), account_id.clone());
+
+        // Check if peer unconfirmed
+        let peer_unconfirmed = PeerConsensusEpochUnconfirmed::<T>::get(model_id.clone(), account_id.clone());
+        
         // If peer didn't submit any form of consensus and can submit, increase penalty count
         if !peer_submitted && !peer_unconfirmed && can_submit {
           // In case of model state issues where a peer couldn't generate legitimate consensus data
@@ -504,6 +521,7 @@ impl<T: Config> Pallet<T> {
         // Ensure model peer is still eligible
         // • is_account_eligible checks if they are over the max penalties count
         if !Self::is_account_eligible(account_id.clone()) {
+          log::info!("AccountId {:?} ineligible in model ID {:?}", account_id, model_id);
           // If False, remove all of accounts model peers across all models
           Self::do_remove_account_model_peers(block, account_id);
         }
@@ -538,11 +556,12 @@ impl<T: Config> Pallet<T> {
   }
 
   pub fn reset_model_consensus_data_and_results(model_id: u32) {
-    let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::max_value(), None);
+    let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
     let _ = PeerConsensusEpochSubmitted::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
     let _ = PeerConsensusEpochUnconfirmed::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
     let _ = ModelTotalConsensusSubmits::<T>::remove(model_id.clone());
     let _ = ModelConsensusEpochUnconfirmedCount::<T>::remove(model_id.clone());
+    let _ = ModelConsensusEpochSubmitCount::<T>::remove(model_id.clone());
   }
 
   pub fn reset_model_consensus_data(model_id: u32) {
@@ -550,5 +569,6 @@ impl<T: Config> Pallet<T> {
     let _ = PeerConsensusEpochUnconfirmed::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
     let _ = ModelTotalConsensusSubmits::<T>::remove(model_id.clone());
     let _ = ModelConsensusEpochUnconfirmedCount::<T>::remove(model_id.clone());
+    let _ = ModelConsensusEpochSubmitCount::<T>::remove(model_id.clone());
   }
 }
