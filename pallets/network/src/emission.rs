@@ -82,12 +82,16 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		// 	return
 		// }
 
+		// ** @to-do: Add `compute_rewards()`
+		// let total_rewards = Self::compute_rewards(consensus_len as u128, total_stake, total_vault_balance);
+
+
 		// *** 5. Ensure divisible by percentage factor
 		// Peer can have a minimum of 0.01% of rewards on both score and stake balance
 		// We ensure this is divisible by how many peers there are
 		// This isn't perfect but it's a quick way to ensure rewards are distributed properly
 		// without requiring to check values after rewards are distributed
-		// consensus_len / total_vault_balance < 0.01 { return }
+		// consensus_len / total_vault_balance > 0.01 { return }
 		// consensus_len * 100.00 > total_vault_balance { return }
 		if (consensus_len as u128).saturating_mul(Self::PERCENTAGE_FACTOR) > total_vault_balance {
 			return
@@ -233,6 +237,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 		// Decrease stake vault balance
 		StakeVaultBalance::<T>::set(total_vault_balance.saturating_sub(total_emissions_on_epoch));
+		log::info!("Generated emissions for a total of {:?}", total_emissions_on_epoch);
   }
 
 	// Excess Weight Distribution
@@ -367,4 +372,10 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 		model_weights_data
 	}
+}
+
+// @to-do: compute the rewards from the stake rewards vault to give on epoch based on ideal stake
+//				 based on total model, peers, and eligible stake balance
+pub fn compute_rewards(total_model_peers: u128, total_stake: u128, total_vault_balance: u128) -> u128 {
+	total_vault_balance
 }
