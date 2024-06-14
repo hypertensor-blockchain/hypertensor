@@ -59,54 +59,56 @@ impl<T: Config> Pallet<T> {
       .expect("blockchain will not exceed 2^64 blocks; QED.")
   }
 
+  // pub fn get_average_score(values: Vec<u128>) -> u128 {
+  //   let outliers: Vec<u128> = Self::filter_outliers(values.clone());
+  //   let sum: u128 = outliers.iter().sum();
+  //   // If sum == 0, get average of values instead
+  //   if sum == 0 {
+  //     let sum: u128 = values.iter().sum();
+  //     let count: u128 = values.len().try_into().unwrap();
+  //     if count == 0 {
+  //       return 0
+  //     } else {
+  //       return sum / count
+  //     }
+  //   }
+  //   let count: u128 = outliers.len().try_into().unwrap();
+  //   sum / count
+  // }
+
   pub fn get_average_score(values: Vec<u128>) -> u128 {
-    let outliers: Vec<u128> = Self::filter_outliers(values.clone());
-    let sum: u128 = outliers.iter().sum();
-    // If sum == 0, get average of values instead
-    if sum == 0 {
-      let sum: u128 = values.iter().sum();
-      let count: u128 = values.len().try_into().unwrap();
-      if count == 0 {
-        return 0
-      } else {
-        return sum / count
-      }
-    }
-    let count: u128 = outliers.len().try_into().unwrap();
-    sum / count
+    let filtered_values: Vec<u128> = Self::filter_outliers(values);
+    let average = Self::get_average(filtered_values);
+    average
   }
 
-  // https://gist.github.com/rmeissn/f5b42fb3e1386a46f60304a57b6d215a
-  // https://stackoverflow.com/a/45804710
+  // https://stackoverflow.com/a/56883420
   // interquartile filter
-  pub fn filter_outliers(values: Vec<u128>) -> Vec<u128> {
-    if values.len() < 4 {
-      return values;
+  fn filter_outliers(values: Vec<u128>) -> Vec<u128> {
+    if values.len() == 4 {
+      let mut final_values: Vec<u128> = Vec::new();
+      let mut values: Vec<u128> = values;
+      values.sort();
+      // Only push 2 middle values
+      // This is a rare scenario but in order to remove any outliers too high or too low
+      // we get only the 2 middle values
+      final_values.push(values[1]);
+      final_values.push(values[2]);
+      return final_values
+    } else if values.len() < 4 {
+      return values
     }
 
     let mut final_values: Vec<u128> = Vec::new();
     let mut values: Vec<u128> = values;
     values.sort();
 
-    let mut q1: f64 = 0.0;
-    let mut q3: f64 = 0.0;
-    if (values.len() / 4) % 1 == 0 { //find quartiles
-      q1 = 0.5 as f64 * (
-        values[(values.len() as f64 / 4.0) as usize] + 
-        values[((values.len() as f64 / 4.0) as usize) + 1]
-      ) as f64;
-      q3 = 0.5 as f64 * (
-        values[(values.len() as f64 * (3.0 / 4.0)) as usize] + 
-        values[((values.len() as f64 * (3.0 / 4.0)) as usize) + 1]
-      ) as f64;
-    } else {
-      q1 = (values[((values.len() as f64 / 4.0) as usize) + 1] as f64).floor();
-      q3 = (values[((values.len() as f64 * (3.0 / 4.0)) as usize) + 1] as f64).ceil();
-    }
+    let q1 = Self::get_quantile(values.clone(), 48.0);
+    let q3 = Self::get_quantile(values.clone(), 52.0);
 
-    let iqr: f64 = q3 - q1;
-    let max_value: f64 = q3 + iqr * 1.5;
-    let min_value: f64 = q1 - iqr * 1.5;
+    let iqr = q3 - q1;
+    let max_value = q3 + iqr * 1.5;
+    let min_value = q1 - iqr * 1.5;
 
     let values_iter: scale_info::prelude::vec::IntoIter<u128> = values.into_iter();
 
@@ -117,7 +119,35 @@ impl<T: Config> Pallet<T> {
       }
     }
 
-    final_values
+    return final_values
+  }
+
+  fn get_quantile(array: Vec<u128>, quantile: f64) -> f64 {
+    // Get the index the quantile is at.
+    let index = quantile / 100.0 * (array.len() as f64 - 1.0);
+
+    // Check if it has decimal places.
+    if index as f64 % 1.0 == 0.0 {
+      return array[index as usize] as f64;
+    } else {
+      // Get the lower index.
+      let lower_index = index.floor() as f64;
+      // Get the remaining.
+      let remainder = index - lower_index;
+      // Add the remaining to the lowerindex value.
+      return array[lower_index as usize] as f64 + remainder * (array[lower_index as usize + 1] as f64 - array[lower_index as usize] as f64) as f64;
+    }
+  }
+
+  fn get_average(array: Vec<u128>) -> u128 {
+    let mut sum = 0;
+
+    for value in array.iter() {
+      sum += *value;
+    }
+
+    // Returning the average of the numbers
+    return sum / array.len() as u128;
   }
 
   // Validates IP Address
@@ -380,12 +410,20 @@ impl<T: Config> Pallet<T> {
     // Remove model peer consensus results
     ModelPeerConsensusResults::<T>::remove(model_id.clone(), account_id.clone());
 
+    ModelPeerConsecutiveConsensusSent::<T>::remove(model_id.clone(), account_id.clone());
+    ModelPeerConsecutiveConsensusNotSent::<T>::remove(model_id.clone(), account_id.clone());
+
+    PeerConsensusEpochSubmitted::<T>::remove(model_id.clone(), account_id.clone());
+    PeerConsensusEpochUnconfirmed::<T>::remove(model_id.clone(), account_id.clone());
+
     // Remove model_id from AccountModels
     let mut account_model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
     account_model_ids.retain(|&x| x != model_id);
 
     // Insert retained model_id's
     AccountModels::<T>::insert(account_id.clone(), account_model_ids);
+
+    log::info!("Removed model peer AccountId {:?} from model ID {:?}", account_id.clone(), model_id.clone());
 
     Self::deposit_event(
       Event::ModelPeerRemoved { 
