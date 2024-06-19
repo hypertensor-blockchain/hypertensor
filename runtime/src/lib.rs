@@ -896,13 +896,13 @@ impl_runtime_apis! {
 			result.encode()
 		}
 		fn get_model_peers_include(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_include(model_id);
+			let result = Network::get_model_peers_included(model_id);
 			result.encode()
 		}
-		fn get_model_peers_submittable(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_submittable(model_id);
-			result.encode()
-		}
+		// fn get_model_peers_submittable(model_id: u32) -> Vec<u8> {
+		// 	let result = Network::get_model_peers_submittable(model_id);
+		// 	result.encode()
+		// }
 		fn get_model_peers_model_unconfirmed_count(model_id: u32) -> u32 {
 			Network::get_model_peers_model_unconfirmed_count(model_id)
 		}
