@@ -389,15 +389,17 @@ impl<T: Config> Pallet<T> {
   // Get model peer is eligible to be a model peer
   // Checks if account penalties do not surpass the max allowed penalties
   pub fn is_account_eligible(account_id: T::AccountId) -> bool {
-    let max_account_penalty_count = MaxAccountPenaltyCount::<T>::get();
-    let account_penalty_count = AccountPenaltyCount::<T>::get(account_id);
+    let max_account_penalty_count: u32 = MaxAccountPenaltyCount::<T>::get();
+    let account_penalty_count: u32 = AccountPenaltyCount::<T>::get(account_id);
     account_penalty_count <= max_account_penalty_count
   }
 
 
   // Remove all account's model peers across all of their models
   pub fn do_remove_account_model_peers(block: u64, account_id: T::AccountId) {
+    // Get all model_ids for account_id
     let model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
+    // Iterate through model_ids and remove model peers
     for model_id in model_ids.iter() {
       Self::do_remove_model_peer(block, *model_id, account_id.clone());
     }
@@ -409,7 +411,7 @@ impl<T: Config> Pallet<T> {
   pub fn do_remove_model_peer(block: u64, model_id: u32, account_id: T::AccountId) {
     // Take and remove ModelPeersData account_id as key
     // `take()` returns and removes data
-    let model_peer = ModelPeersData::<T>::take(model_id.clone(), account_id.clone());
+    let model_peer: ModelPeer<T::AccountId> = ModelPeersData::<T>::take(model_id.clone(), account_id.clone());
 
     // Remove ModelPeerAccount peer_id as key
     ModelPeerAccount::<T>::remove(model_id.clone(), model_peer.clone().peer_id);
@@ -451,11 +453,13 @@ impl<T: Config> Pallet<T> {
     );
   }
 
+  // TODO: ?
   pub fn get_account_slash_percentage(account_id: T::AccountId) -> u128 {
     let model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
     0
   }
 
+  // Get the total number of model peers that are eligible to submit consensus data
   pub fn get_total_submittable_model_peers(
     model_id: u32,
     block: u64,
@@ -481,7 +485,7 @@ impl<T: Config> Pallet<T> {
     total_submit_eligible_model_peers
   }
 
-  // Gets the count of all eligible to submit model peers on the previous epoch to account for the current block steps
+  // Gets the count of all eligible-to-submit model peers on the previous epoch to account for the current block steps
   pub fn get_prev_epoch_total_submittable_model_peers(
     model_id: u32,
     block: u64,
@@ -489,7 +493,7 @@ impl<T: Config> Pallet<T> {
     min_required_peer_consensus_submit_epochs: u64
   ) -> u32 {
     // Count of eligible to submit consensus data model peers
-    let mut total_submit_eligible_model_peers = 0;
+    let mut total_submit_eligible_model_peers: u32 = 0;
     
     // increment total_submit_eligible_model_peers with model peers that are eligible to submit consensus data
     for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
