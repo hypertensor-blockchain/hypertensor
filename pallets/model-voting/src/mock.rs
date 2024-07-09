@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use super::*;
-use crate as pallet_admin;
+use crate as pallet_model_voting;
 use frame_support::{
   parameter_types,
   traits::Everything,
@@ -39,7 +39,7 @@ frame_support::construct_runtime!(
     System: system,
     Balances: pallet_balances,
     Network: pallet_network,
-    Admin: pallet_admin,
+    ModelVoting: pallet_model_voting,
 	}
 );
 
@@ -65,6 +65,11 @@ pub type Balance = u128;
 // An index to a block.
 #[allow(dead_code)]
 pub type BlockNumber = u64;
+
+pub const MILLISECS_PER_BLOCK: u64 = 6000;
+pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+pub const HOURS: BlockNumber = MINUTES * 60;
+pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const EXISTENTIAL_DEPOSIT: u128 = 500;
 
@@ -120,9 +125,21 @@ impl pallet_network::Config for Test {
 	type InitialTxRateLimit = ConstU64<0>;
 }
 
+parameter_types! {
+	pub const VotingPeriod: BlockNumber = DAYS * 21;
+	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+}
+
 impl Config for Test {
+	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
-  type AdminInterface = Network;
+	type ModelVote = Network;
+	type Currency = Balances;
+	type MaxActivateProposals = ConstU32<32>;
+	type MaxDeactivateProposals = ConstU32<32>;
+	type MaxProposals = ConstU32<32>;
+	type VotingPeriod = VotingPeriod;
+	type EnactmentPeriod = EnactmentPeriod;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
