@@ -39,7 +39,7 @@ use crate::{
   MaxModelConsensusUnconfirmedConsecutiveEpochs, ModelConsensusUnconfirmedConsecutiveEpochsCount,
   DishonestyVotingPeriod, ModelPeerDishonestyVote
 };
-use frame_support::weights::Pays;
+
 
 type AccountIdOf<Test> = <Test as frame_system::Config>::AccountId;
 // type PeerIdOf<Test> = PeerId;

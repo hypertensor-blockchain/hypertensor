@@ -1,7 +1,7 @@
 use super::*;
 use frame_support::dispatch::Vec;
 use sp_runtime::Saturating;
-use sp_std::collections::{btree_map::BTreeMap};
+use sp_std::collections::btree_map::BTreeMap;
 
 impl<T: Config> Pallet<T> {
   pub fn form_peer_consensus(block: u64) {
@@ -297,9 +297,9 @@ impl<T: Config> Pallet<T> {
           // 		2. We then get the average score for the peer based on the interquantile algorithm from all submitted scores
           //			 and update their `score` - this is used later when generating emissions
           //
-          let peer_submitted = PeerConsensusEpochSubmitted::<T>::get(model_id.clone(), consensus_result_account_id.clone());
+          let peer_submitted: bool = PeerConsensusEpochSubmitted::<T>::get(model_id.clone(), consensus_result_account_id.clone());
           
-          let peer_unconfirmed = PeerConsensusEpochUnconfirmed::<T>::get(model_id.clone(), consensus_result_account_id.clone());
+          let peer_unconfirmed: bool = PeerConsensusEpochUnconfirmed::<T>::get(model_id.clone(), consensus_result_account_id.clone());
 
           // Peers that are able to be included in consensus data but can't submit data will be removed in `else`
           // If the peer submitted data, we create their score.
@@ -363,11 +363,11 @@ impl<T: Config> Pallet<T> {
         let max_required_score: u128 = avg_score + delta;
         let min_required_score: u128 = avg_score - delta;
 
-        let mut score_index = 0;
+        let mut score_index: usize = 0;
         for score in consensus_result_scores.iter() {
           // if peer submitted score outside allowed delta
           if *score <= min_required_score || *score >= max_required_score {
-            let account_id = &consensus_result_successful_consensus[score_index];
+            let account_id: &<T as Config>::AccountId = &consensus_result_successful_consensus[score_index];
 
             if let Some(count) = against_consensus_peer_count.get_mut(&account_id.clone()) {
               *count += 1;
@@ -453,10 +453,10 @@ impl<T: Config> Pallet<T> {
         }
 
         // Check if peer has submitted data
-        let peer_submitted = PeerConsensusEpochSubmitted::<T>::get(model_id.clone(), account_id.clone());
+        let peer_submitted: bool = PeerConsensusEpochSubmitted::<T>::get(model_id.clone(), account_id.clone());
 
         // Check if peer unconfirmed
-        let peer_unconfirmed = PeerConsensusEpochUnconfirmed::<T>::get(model_id.clone(), account_id.clone());
+        let peer_unconfirmed: bool = PeerConsensusEpochUnconfirmed::<T>::get(model_id.clone(), account_id.clone());
         
         // If peer didn't submit any form of consensus and can submit, increase penalty count
         if !peer_submitted && !peer_unconfirmed && can_submit {

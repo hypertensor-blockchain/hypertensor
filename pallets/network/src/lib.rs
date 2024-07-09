@@ -2393,7 +2393,7 @@ pub mod pallet {
 			// then model can be removed
 			let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone());
 			let min_model_peers: u32 = MinModelPeers::<T>::get();
-			let mut has_min_peers: bool = true;
+			let has_min_peers: bool = true;
 			if total_model_peers < min_model_peers {
 				let block: u64 = Self::get_current_block_as_u64();
 				let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
