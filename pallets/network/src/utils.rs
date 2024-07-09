@@ -129,7 +129,7 @@ impl<T: Config> Pallet<T> {
       return array[index as usize] as f64;
     } else {
       // Get the lower index.
-      let lower_index: f64 = index.floor() as f64;
+      let lower_index: f64 = libm::floor(index);
       // Get the remaining.
       let remainder: f64 = index - lower_index;
       // Add the remaining to the lowerindex value.

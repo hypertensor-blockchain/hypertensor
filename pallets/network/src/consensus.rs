@@ -367,7 +367,7 @@ impl<T: Config> Pallet<T> {
         for score in consensus_result_scores.iter() {
           // if peer submitted score outside allowed delta
           if *score <= min_required_score || *score >= max_required_score {
-            let account_id: &<T as Config>::AccountId = &consensus_result_successful_consensus[score_index];
+            let account_id: &T::AccountId = &consensus_result_successful_consensus[score_index];
 
             if let Some(count) = against_consensus_peer_count.get_mut(&account_id.clone()) {
               *count += 1;
