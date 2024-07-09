@@ -61,6 +61,9 @@ use sp_runtime::SaturatedConversion;
 /// Import custom pallets.
 pub use pallet_network;
 pub use pallet_multisig;
+pub use pallet_model_voting;
+// pub use pallet_model_voting_v2;
+// pub use pallet_offchain_worker;
 
 // testing
 
@@ -250,7 +253,7 @@ impl pallet_multisig::Config for Runtime {
 	type WeightInfo = pallet_multisig::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+// impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
 
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
@@ -318,58 +321,6 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
-impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
-where
-RuntimeCall: From<LocalCall>,
-{
-	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
-		call: RuntimeCall,
-		public: <Signature as sp_runtime::traits::Verify>::Signer,
-		account: AccountId,
-		nonce: Nonce,
-	) -> Option<(RuntimeCall, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
-		let period = BlockHashCount::get() as u64;
-		let current_block = System::block_number()
-			.saturated_into::<u64>()
-			.saturating_sub(1);
-		let tip = 0;
-		let era = generic::Era::mortal(period, current_block);
-		let extra: SignedExtra = (
-			frame_system::CheckNonZeroSender::<Runtime>::new(),
-			frame_system::CheckSpecVersion::<Runtime>::new(),
-			frame_system::CheckTxVersion::<Runtime>::new(),
-			frame_system::CheckGenesis::<Runtime>::new(),
-			frame_system::CheckEra::<Runtime>::from(era),
-			frame_system::CheckNonce::<Runtime>::from(nonce),
-			frame_system::CheckWeight::<Runtime>::new(),
-			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
-		);
-
-		let raw_payload = SignedPayload::new(call, extra)
-			.map_err(|_e| {
-				// log::warn!("Unable to create signed payload: {:?}", e);
-			})
-			.ok()?;
-		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
-		let address = account;
-		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (sp_runtime::MultiAddress::Id(address), signature.into(), extra)))
-	}
-}
-
-impl frame_system::offchain::SigningTypes for Runtime {
-	type Public = <Signature as sp_runtime::traits::Verify>::Signer;
-	type Signature = Signature;
-}
-
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-where
-	RuntimeCall: From<C>,
-{
-	type OverarchingCall = RuntimeCall;
-	type Extrinsic = UncheckedExtrinsic;
-}
-
 // Configure the pallet network.
 parameter_types! {
 	pub const NetworkInitialBondsMovingAverage: u64 = 900_000;
@@ -424,75 +375,76 @@ impl pallet_rewards::Config for Runtime {
 // admin
 impl pallet_admin::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type AdminInterface = Network;
+	type NetworkAdminInterface = Network;
+	type ModelVotingAdminInterface = ModelVoting;
 }
 
 // scheduler
-parameter_types! {
-	pub const MaxScheduledPerBlock: u32 = 50;
-	pub MaximumSchedulerWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
-}
+// parameter_types! {
+// 	pub const MaxScheduledPerBlock: u32 = 50;
+// 	pub MaximumSchedulerWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
+// }
 
-impl pallet_scheduler::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type RuntimeOrigin = RuntimeOrigin;
-	type PalletsOrigin = OriginCaller;
-	type RuntimeCall = RuntimeCall;
-	type MaximumWeight = MaximumSchedulerWeight;
-	type ScheduleOrigin = EnsureRoot<AccountId>;
-	type OriginPrivilegeCmp = frame_support::traits::EqualPrivilegeOnly;
-	type MaxScheduledPerBlock = MaxScheduledPerBlock;
-	type WeightInfo = ();
-	type Preimages = ();
-}
+// impl pallet_scheduler::Config for Runtime {
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type RuntimeOrigin = RuntimeOrigin;
+// 	type PalletsOrigin = OriginCaller;
+// 	type RuntimeCall = RuntimeCall;
+// 	type MaximumWeight = MaximumSchedulerWeight;
+// 	type ScheduleOrigin = EnsureRoot<AccountId>;
+// 	type OriginPrivilegeCmp = frame_support::traits::EqualPrivilegeOnly;
+// 	type MaxScheduledPerBlock = MaxScheduledPerBlock;
+// 	type WeightInfo = ();
+// 	type Preimages = ();
+// }
 
-// democracy
-parameter_types! {
-	// pub const LaunchPeriod: BlockNumber = 10 * DAYS;
-	pub const LaunchPeriod: BlockNumber = 2 * MINUTES;
-	pub const VotingPeriod: BlockNumber = 2 * MINUTES;
-	pub const FastTrackVotingPeriod: BlockNumber = 2;
-	pub const InstantAllowed: bool = true;
-	// pub const MinimumDeposit: Balance = 100;
-	pub const MinimumDeposit: Balance = 1;
-	pub const EnactmentPeriod: BlockNumber = 5;
-	pub const CooloffPeriod: BlockNumber = 5;
-	pub const MaxVotes: u32 = 100;
-	pub const MaxProposal: u32 = 100;
-	pub const MaxDeposits: u32 = 100;
-}
+// // democracy
+// parameter_types! {
+// 	// pub const LaunchPeriod: BlockNumber = 10 * DAYS;
+// 	pub const LaunchPeriod: BlockNumber = 2 * MINUTES;
+// 	pub const VotingPeriod: BlockNumber = 2 * MINUTES;
+// 	pub const FastTrackVotingPeriod: BlockNumber = 2;
+// 	pub const InstantAllowed: bool = true;
+// 	// pub const MinimumDeposit: Balance = 100;
+// 	pub const MinimumDeposit: Balance = 1;
+// 	pub const EnactmentPeriod: BlockNumber = 5;
+// 	pub const CooloffPeriod: BlockNumber = 5;
+// 	pub const MaxVotes: u32 = 100;
+// 	pub const MaxProposal: u32 = 100;
+// 	pub const MaxDeposits: u32 = 100;
+// }
 
-impl pallet_democracy::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type EnactmentPeriod = EnactmentPeriod;
-	type LaunchPeriod = LaunchPeriod;
-	type VotingPeriod = VotingPeriod;
-	type VoteLockingPeriod = EnactmentPeriod;
-	type MinimumDeposit = MinimumDeposit;
-	type ExternalOrigin = EnsureRoot<Self::AccountId>;
-	type ExternalMajorityOrigin = EnsureRoot<Self::AccountId>;
-	type ExternalDefaultOrigin = EnsureRoot<Self::AccountId>;
-	type FastTrackOrigin = EnsureRoot<Self::AccountId>;
-	type InstantOrigin = EnsureRoot<Self::AccountId>;
-	type InstantAllowed = InstantAllowed;
-	type FastTrackVotingPeriod = FastTrackVotingPeriod;
-	type CancellationOrigin = EnsureRoot<Self::AccountId>;
-	type BlacklistOrigin = EnsureRoot<Self::AccountId>;
-	type CancelProposalOrigin = EnsureRoot<Self::AccountId>;
-	type VetoOrigin = EnsureSigned<Self::AccountId>;
-	type CooloffPeriod = CooloffPeriod;
-	type Slash = ();
-	type Scheduler = Scheduler;
-	type PalletsOrigin = OriginCaller;
-	type MaxVotes = MaxVotes;
-	type WeightInfo = ();
-	type MaxProposals = MaxProposal;
-	type MaxDeposits = MaxDeposits;
-	type Preimages = Preimage;
-	type MaxBlacklisted = ();
-	type SubmitOrigin = EnsureSigned<AccountId>;
-}
+// impl pallet_democracy::Config for Runtime {
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type Currency = Balances;
+// 	type EnactmentPeriod = EnactmentPeriod;
+// 	type LaunchPeriod = LaunchPeriod;
+// 	type VotingPeriod = VotingPeriod;
+// 	type VoteLockingPeriod = EnactmentPeriod;
+// 	type MinimumDeposit = MinimumDeposit;
+// 	type ExternalOrigin = EnsureRoot<Self::AccountId>;
+// 	type ExternalMajorityOrigin = EnsureRoot<Self::AccountId>;
+// 	type ExternalDefaultOrigin = EnsureRoot<Self::AccountId>;
+// 	type FastTrackOrigin = EnsureRoot<Self::AccountId>;
+// 	type InstantOrigin = EnsureRoot<Self::AccountId>;
+// 	type InstantAllowed = InstantAllowed;
+// 	type FastTrackVotingPeriod = FastTrackVotingPeriod;
+// 	type CancellationOrigin = EnsureRoot<Self::AccountId>;
+// 	type BlacklistOrigin = EnsureRoot<Self::AccountId>;
+// 	type CancelProposalOrigin = EnsureRoot<Self::AccountId>;
+// 	type VetoOrigin = EnsureSigned<Self::AccountId>;
+// 	type CooloffPeriod = CooloffPeriod;
+// 	type Slash = ();
+// 	type Scheduler = Scheduler;
+// 	type PalletsOrigin = OriginCaller;
+// 	type MaxVotes = MaxVotes;
+// 	type WeightInfo = ();
+// 	type MaxProposals = MaxProposal;
+// 	type MaxDeposits = MaxDeposits;
+// 	type Preimages = Preimage;
+// 	type MaxBlacklisted = ();
+// 	type SubmitOrigin = EnsureSigned<AccountId>;
+// }
 
 // preimage
 parameter_types! {
@@ -511,104 +463,105 @@ impl pallet_preimage::Config for Runtime {
 }
 
 // conviction voting
-parameter_types! {
-	// pub const VoteLockingPeriod: BlockNumber = 1 * DAYS;
-	pub const VoteLockingPeriod: BlockNumber = 2 * MINUTES;
-}
-
-// impl pallet_conviction_voting::Config for Runtime {
-// 	type WeightInfo = pallet_conviction_voting::weights::SubstrateWeight<Self>;
-// 	type RuntimeEvent = RuntimeEvent;
-// 	type Currency = Balances;
-// 	type VoteLockingPeriod = VoteLockingPeriod;
-// 	type MaxVotes = ConstU32<512>;
-// 	type MaxTurnout = frame_support::traits::TotalIssuanceOf<Balances, Self::AccountId>;
-// 	type Polls = Referenda;
+// parameter_types! {
+// 	// pub const VoteLockingPeriod: BlockNumber = 1 * DAYS;
+// 	pub const VoteLockingPeriod: BlockNumber = 2 * MINUTES;
 // }
 
-// https://github.com/paritytech/substrate/blob/master/bin/node/runtime/src/lib.rs#L832
-impl pallet_conviction_voting::Config for Runtime {
-	type WeightInfo = pallet_conviction_voting::weights::SubstrateWeight<Runtime>;
-	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type Polls = Referenda;
-	type MaxTurnout = frame_support::traits::TotalIssuanceOf<Balances, Self::AccountId>;
-	type MaxVotes = ConstU32<512>;
-	type VoteLockingPeriod = VoteLockingPeriod;
-}
+// // https://github.com/paritytech/substrate/blob/master/bin/node/runtime/src/lib.rs#L832
+// impl pallet_conviction_voting::Config for Runtime {
+// 	type WeightInfo = pallet_conviction_voting::weights::SubstrateWeight<Runtime>;
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type Currency = Balances;
+// 	type Polls = Referenda;
+// 	type MaxTurnout = frame_support::traits::TotalIssuanceOf<Balances, Self::AccountId>;
+// 	type MaxVotes = ConstU32<512>;
+// 	type VoteLockingPeriod = VoteLockingPeriod;
+// }
 
-// referenda
-parameter_types! {
-	pub const AlarmInterval: BlockNumber = 10;
-	pub SubmissionDeposit: Balance = 10;
-	// pub const UndecidingTimeout: BlockNumber = 14 * DAYS;
-	pub const UndecidingTimeout: BlockNumber = 4 * MINUTES;
-}
+// impl pallet_model_voting_v2::Config for Runtime {
+// 	type WeightInfo = pallet_model_voting_v2::weights::SubstrateWeight<Runtime>;
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type Currency = Balances;
+// 	type Polls = Referenda;
+// 	type MaxTurnout = frame_support::traits::TotalIssuanceOf<Balances, Self::AccountId>;
+// 	type MaxVotes = ConstU32<512>;
+// 	type VoteLockingPeriod = VoteLockingPeriod;
+// }
 
-pub struct TracksInfo;
-impl pallet_referenda::TracksInfo<Balance, BlockNumber> for TracksInfo {
-	type Id = u16;
-	type RuntimeOrigin = <RuntimeOrigin as frame_support::traits::OriginTrait>::PalletsOrigin;
-	fn tracks() -> &'static [(Self::Id, pallet_referenda::TrackInfo<Balance, BlockNumber>)] {
-		static DATA: [(u16, pallet_referenda::TrackInfo<Balance, BlockNumber>); 1] = [
-			(
-				0u16,
-				pallet_referenda::TrackInfo {
-					name: "root",
-					max_deciding: 1,
-					decision_deposit: 10,
-					prepare_period: 4,
-					decision_period: 4,
-					confirm_period: 2,
-					min_enactment_period: 4,
-					min_approval: pallet_referenda::Curve::LinearDecreasing {
-						length: Perbill::from_percent(100),
-						floor: Perbill::from_percent(50),
-						ceil: Perbill::from_percent(100),
-					},
-					min_support: pallet_referenda::Curve::LinearDecreasing {
-						length: Perbill::from_percent(100),
-						floor: Perbill::from_percent(0),
-						ceil: Perbill::from_percent(100),
-					},
-				},
-			)
-		];
-		&DATA[..]
-	}
-	fn track_for(id: &Self::RuntimeOrigin) -> Result<Self::Id, ()> {
-		if let Ok(system_origin) = frame_system::RawOrigin::try_from(id.clone()) {
-			match system_origin {
-				frame_system::RawOrigin::Root => Ok(0),
-				_ => Err(()),
-			}
-		} else {
-			Err(())
-		}
-	}
-}
-pallet_referenda::impl_tracksinfo_get!(TracksInfo, Balance, BlockNumber);
+// // referenda
+// parameter_types! {
+// 	pub const AlarmInterval: BlockNumber = 10;
+// 	pub SubmissionDeposit: Balance = 10;
+// 	// pub const UndecidingTimeout: BlockNumber = 14 * DAYS;
+// 	pub const UndecidingTimeout: BlockNumber = 4 * MINUTES;
+// }
 
-impl pallet_referenda::Config for Runtime {
-	type WeightInfo = pallet_referenda::weights::SubstrateWeight<Self>;
-	type RuntimeCall = RuntimeCall;
-	type RuntimeEvent = RuntimeEvent;
-	type Scheduler = Scheduler;
-	type Currency = pallet_balances::Pallet<Self>;
-	type SubmitOrigin = EnsureSigned<AccountId>;
-	type CancelOrigin = EnsureRoot<AccountId>;
-	type KillOrigin = EnsureRoot<AccountId>;
-	type Slash = ();
-	type Votes = pallet_conviction_voting::VotesOf<Runtime>;
-	type Tally = pallet_conviction_voting::TallyOf<Runtime>;
-	type SubmissionDeposit = SubmissionDeposit;
-	type MaxQueued = ConstU32<100>;
-	type UndecidingTimeout = UndecidingTimeout;
-	type AlarmInterval = AlarmInterval;
-	type Tracks = TracksInfo;
-	type Preimages = Preimage;
-}
+// pub struct TracksInfo;
+// impl pallet_referenda::TracksInfo<Balance, BlockNumber> for TracksInfo {
+// 	type Id = u16;
+// 	type RuntimeOrigin = <RuntimeOrigin as frame_support::traits::OriginTrait>::PalletsOrigin;
+// 	fn tracks() -> &'static [(Self::Id, pallet_referenda::TrackInfo<Balance, BlockNumber>)] {
+// 		static DATA: [(u16, pallet_referenda::TrackInfo<Balance, BlockNumber>); 1] = [
+// 			(
+// 				0u16,
+// 				pallet_referenda::TrackInfo {
+// 					name: "root",
+// 					max_deciding: 1,
+// 					decision_deposit: 10,
+// 					prepare_period: 4,
+// 					decision_period: 4,
+// 					confirm_period: 2,
+// 					min_enactment_period: 4,
+// 					min_approval: pallet_referenda::Curve::LinearDecreasing {
+// 						length: Perbill::from_percent(100),
+// 						floor: Perbill::from_percent(50),
+// 						ceil: Perbill::from_percent(100),
+// 					},
+// 					min_support: pallet_referenda::Curve::LinearDecreasing {
+// 						length: Perbill::from_percent(100),
+// 						floor: Perbill::from_percent(0),
+// 						ceil: Perbill::from_percent(100),
+// 					},
+// 				},
+// 			)
+// 		];
+// 		&DATA[..]
+// 	}
+// 	fn track_for(id: &Self::RuntimeOrigin) -> Result<Self::Id, ()> {
+// 		if let Ok(system_origin) = frame_system::RawOrigin::try_from(id.clone()) {
+// 			match system_origin {
+// 				frame_system::RawOrigin::Root => Ok(0),
+// 				_ => Err(()),
+// 			}
+// 		} else {
+// 			Err(())
+// 		}
+// 	}
+// }
+// pallet_referenda::impl_tracksinfo_get!(TracksInfo, Balance, BlockNumber);
 
+// impl pallet_referenda::Config for Runtime {
+// 	type WeightInfo = pallet_referenda::weights::SubstrateWeight<Self>;
+// 	type RuntimeCall = RuntimeCall;
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type Scheduler = Scheduler;
+// 	type Currency = pallet_balances::Pallet<Self>;
+// 	type SubmitOrigin = EnsureSigned<AccountId>;
+// 	type CancelOrigin = EnsureRoot<AccountId>;
+// 	type KillOrigin = EnsureRoot<AccountId>;
+// 	type Slash = ();
+// 	type Votes = pallet_model_voting_v2::VotesOf<Runtime>;
+// 	type Tally = pallet_model_voting_v2::TallyOf<Runtime>;
+// 	type SubmissionDeposit = SubmissionDeposit;
+// 	type MaxQueued = ConstU32<100>;
+// 	type UndecidingTimeout = UndecidingTimeout;
+// 	type AlarmInterval = AlarmInterval;
+// 	type Tracks = TracksInfo;
+// 	type Preimages = Preimage;
+// }
+
+// //  old
 // impl pallet_referenda::Config for Runtime {
 // 	type AlarmInterval = AlarmInterval;
 // 	type Currency = Balances;
@@ -630,12 +583,6 @@ impl pallet_referenda::Config for Runtime {
 // }
 
 parameter_types! {
-	pub const UnsignedInterval: BlockNumber = 10;
-	pub UnsignedPriority: u64 = 100;
-	pub GracePeriod: BlockNumber = 3;
-}
-
-parameter_types! {
 	pub const InitialTxRateLimit: u64 = 0;
 }
 
@@ -647,12 +594,29 @@ impl pallet_network::Config for Runtime {
 	type InitialTxRateLimit = InitialTxRateLimit;
 }
 
+parameter_types! {
+	pub const VotingPeriod: BlockNumber = DAYS * 21;
+	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+}
+
+impl pallet_model_voting::Config for Runtime {
+	type WeightInfo = ();
+	type RuntimeEvent = RuntimeEvent;
+	type ModelVote = Network;
+	type Currency = Balances;
+	type MaxActivateProposals = ConstU32<32>;
+	type MaxDeactivateProposals = ConstU32<32>;
+	type MaxProposals = ConstU32<32>;
+	type VotingPeriod = VotingPeriod;
+	type EnactmentPeriod = EnactmentPeriod;
+}
+
 // cargo check -p node-template-runtime --release
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime {
 		System: frame_system,
-		InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
+		// InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
 		Timestamp: pallet_timestamp,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
@@ -663,13 +627,15 @@ construct_runtime!(
 		Multisig: pallet_multisig,
 		Authorship: pallet_authorship,
 		Rewards: pallet_rewards,
-		Scheduler: pallet_scheduler,
-		Democracy: pallet_democracy,
+		// Scheduler: pallet_scheduler,
+		// Democracy: pallet_democracy,
 		Preimage: pallet_preimage,
-		Referenda: pallet_referenda,
-		ConvictionVoting: pallet_conviction_voting,
+		// Referenda: pallet_referenda,
+		// ConvictionVoting: pallet_conviction_voting,
+		// ConvictionModelVoting: pallet_model_voting_v2,
 		Network: pallet_network,
 		Admin: pallet_admin,
+		ModelVoting: pallet_model_voting,
 	}
 );
 
@@ -714,10 +680,10 @@ mod benches {
 	define_benchmarks!(
 		[frame_benchmarking, BaselineBench::<Runtime>]
 		[frame_system, SystemBench::<Runtime>]
+		[pallet_grandpa, Grandpa]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_conviction_voting, ConvictionVoting]
-		[pallet_referenda, Referenda]
+		[pallet_model_voting, ModelVoting]
 		[pallet_network, Network]
 	);
 }
@@ -904,7 +870,9 @@ impl_runtime_apis! {
 			result.encode()
 		}
 		fn get_model_peers_model_unconfirmed_count(model_id: u32) -> u32 {
-			Network::get_model_peers_model_unconfirmed_count(model_id)
+			let result = Network::get_model_peers_model_unconfirmed_count(model_id);
+			result
+			// result.encode()
 		}
 	}
 

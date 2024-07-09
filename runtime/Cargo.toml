@@ -42,13 +42,8 @@ sp-session = { version = "4.0.0-dev", default-features = false, git = "https://g
 sp-std = { version = "8.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 sp-transaction-pool = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 sp-version = { version = "22.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
-pallet-democracy = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
-pallet-scheduler = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
-pallet-preimage = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
-pallet-referenda = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
-pallet-conviction-voting = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 
-pallet-insecure-randomness-collective-flip = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+pallet-preimage = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 
 # Multisig
 pallet-multisig = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", "branch" = "polkadot-v1.0.0" }
@@ -71,6 +66,10 @@ pallet-authorship = { version = "4.0.0-dev", default-features = false, git = "ht
 
 # Rewards
 pallet-rewards = { version = "4.0.0-dev", default-features = false, path = "../pallets/rewards" }
+
+# Conviction model voting
+pallet-model-voting = { version = "4.0.0-dev", default-features = false, path = "../pallets/model-voting" }
+
 
 sp-debug-derive = { git = "https://github.com/paritytech/substrate.git", default-features = false, features = [ "force-debug" ] }
 
@@ -101,14 +100,10 @@ std = [
 	"pallet-authorship/std",
 	"pallet-multisig/std",
 	"pallet-rewards/std",
-	"pallet-democracy/std",
-	"pallet-scheduler/std",
 	"pallet-preimage/std",
-	"pallet-referenda/std",
-	"pallet-conviction-voting/std",
-	"pallet-insecure-randomness-collective-flip/std",
 	"pallet-network/std",
 	"pallet-admin/std",
+	"pallet-model-voting/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
@@ -131,9 +126,8 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
-	"pallet-conviction-voting/runtime-benchmarks",
-	"pallet-referenda/runtime-benchmarks",
 	"pallet-network/runtime-benchmarks",
+	"pallet-model-voting/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [
@@ -147,5 +141,4 @@ try-runtime = [
 	"pallet-sudo/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",
-	"pallet-insecure-randomness-collective-flip/try-runtime",
 ]
