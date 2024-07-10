@@ -22,6 +22,8 @@ use log::info;
 use sp_core::{H256, U256};
 use frame_support::traits::Currency;
 use pallet_network::MinModelPeers;
+use pallet_model_voting::{PeerVotePremium, Quorum};
+
 
 type AccountIdOf<Test> = <Test as frame_system::Config>::AccountId;
 
@@ -578,6 +580,64 @@ fn test_set_remove_model_peer_epoch_percentage() {
   })
 }
 
+#[test]
+fn test_set_peer_vote_premium() {
+  new_test_ext().execute_with(|| {
+    let value = 101;
 
+    assert_err!(
+      Admin::set_peer_vote_premium(
+        RuntimeOrigin::root(),
+        value,
+      ),
+      pallet_model_voting::Error::<Test>::InvalidPeerVotePremium
+    );
 
+    let value = 50;
 
+    assert_ok!(
+      Admin::set_peer_vote_premium(
+        RuntimeOrigin::root(),
+        value,
+      )
+    );
+
+    let value = pallet_model_voting::PeerVotePremium::<Test>::get();
+    assert_eq!(value, value);
+
+    // shouldn't be able to set the same value
+    assert_err!(
+      Admin::set_peer_vote_premium(
+        RuntimeOrigin::root(),
+        value,
+      ),
+      pallet_model_voting::Error::<Test>::InvalidPeerVotePremium
+    );
+
+  })
+}
+
+#[test]
+fn test_set_quorum() {
+  new_test_ext().execute_with(|| {
+    assert_err!(
+      Admin::set_quorum(
+        RuntimeOrigin::root(),
+        0,
+      ),
+      pallet_model_voting::Error::<Test>::InvalidQuorum
+    );
+
+    let value = 1000000;
+
+    assert_ok!(
+      Admin::set_quorum(
+        RuntimeOrigin::root(),
+        value,
+      )
+    );
+
+    let value = pallet_model_voting::Quorum::<Test>::get();
+    assert_eq!(value, value);
+  })
+}
