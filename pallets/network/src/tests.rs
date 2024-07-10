@@ -37,7 +37,9 @@ use crate::{
   ModelTotalConsensusSubmits, PeerAgainstConsensusRemovalThreshold,
   ModelConsensusEpochUnconfirmedCount, ModelsInConsensus,
   MaxModelConsensusUnconfirmedConsecutiveEpochs, ModelConsensusUnconfirmedConsecutiveEpochsCount,
-  DishonestyVotingPeriod, ModelPeerDishonestyVote
+  DishonestyVotingPeriod, ModelPeerDishonestyVote, MinRequiredPeerConsensusDishonestyEpochs,
+  AccountModelDelegateStakeShares,TotalModelDelegateStakeShares, TotalModelDelegateStakeBalance,
+  MinRequiredDelegateUnstakeEpochs
 };
 use frame_support::weights::Pays;
 
@@ -158,6 +160,13 @@ fn make_model_peer_consensus_data_submittable() {
   let min_required_peer_consensus_submit_epochs: u64 = Network::min_required_peer_consensus_submit_epochs();
   System::set_block_number(System::block_number() + consensus_blocks_interval * min_required_peer_consensus_submit_epochs);
   make_consensus_data_submittable();
+}
+
+fn make_model_peer_dishonesty_consensus_proposable() {
+  // increase blocks
+  let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
+  let min_required_peer_consensus_submit_epochs: u64 = MinRequiredPeerConsensusDishonestyEpochs::<Test>::get();
+  System::set_block_number(System::block_number() + consensus_blocks_interval * min_required_peer_consensus_submit_epochs);
 }
 
 fn make_model_peer_removable() {
@@ -2971,7 +2980,7 @@ fn test_remove_stake_err() {
         model_id.clone(),
         0,
       ),
-      Error::<Test>::NotEnoughStaketoWithdraw,
+      Error::<Test>::NotEnoughStakeToWithdraw,
     );
 
     assert_err!(
@@ -2980,7 +2989,7 @@ fn test_remove_stake_err() {
         model_id.clone(),
         amount+1,
       ),
-      Error::<Test>::NotEnoughStaketoWithdraw,
+      Error::<Test>::NotEnoughStakeToWithdraw,
     );
 
     assert_err!(
@@ -3787,7 +3796,8 @@ fn test_propose_model_peer_dishonest_proposer_model_error() {
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         1,
-        peer(0)
+        peer(1),
+        "test_data".into()
       ),
       Error::<Test>::ModelNotExist
     );
@@ -3827,13 +3837,14 @@ fn test_propose_model_peer_dishonest_proposer_model_peer_exists_error() {
       model_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_err!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(n_peers + 1)),
         model_id.clone(),
-        peer(n_peers + 1)
+        peer(n_peers + 1),
+        "test_data".into()
       ),
       Error::<Test>::ModelPeerNotExist
     );
@@ -3878,7 +3889,8 @@ fn test_propose_model_peer_dishonest_proposer_not_submittable() {
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       ),
       Error::<Test>::PeerConsensusSubmitEpochNotReached
     );
@@ -3906,7 +3918,6 @@ fn test_propose_model_peer_dishonest_votee_peer_id_exists() {
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
-    let mut amount_staked: u128 = 0;
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3919,13 +3930,14 @@ fn test_propose_model_peer_dishonest_votee_peer_id_exists() {
       model_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_err!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(n_peers + 1)
+        peer(n_peers + 1),
+        "test_data".into()
       ),
       Error::<Test>::PeerIdNotExist
     );
@@ -3953,7 +3965,6 @@ fn test_propose_model_peer_dishonest_min_model_peers_error() {
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
-    let mut amount_staked: u128 = 0;
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3966,13 +3977,14 @@ fn test_propose_model_peer_dishonest_min_model_peers_error() {
       model_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_err!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       ),
       Error::<Test>::ModelPeersMin
     );
@@ -4013,13 +4025,14 @@ fn test_propose_model_peer_dishonest() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4074,13 +4087,14 @@ fn test_vote_model_peer_dishonest_model_peer_exists_error() {
       model_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4131,13 +4145,14 @@ fn test_vote_model_peer_dishonest_proposer_not_submittable() {
       model_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4158,7 +4173,8 @@ fn test_vote_model_peer_dishonest_proposer_not_submittable() {
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(max_model_peers)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       ),
       Error::<Test>::PeerConsensusSubmitEpochNotReached
     );
@@ -4199,13 +4215,14 @@ fn test_vote_model_peer_dishonest_min_model_peers_error() {
       model_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4261,13 +4278,14 @@ fn test_vote_model_peer_dishonest_peer_id_exists_error() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4318,7 +4336,7 @@ fn test_vote_model_peer_dishonest_not_proposed_error() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_err!(
       Network::vote_model_peer_dishonest(
@@ -4365,13 +4383,14 @@ fn test_vote_model_peer_dishonest_period_over_error() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4424,13 +4443,14 @@ fn test_vote_model_peer_dishonest_duplicate_error() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4489,13 +4509,14 @@ fn test_vote_model_peer_dishonest_period_passed_error() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4547,13 +4568,14 @@ fn test_vote_model_peer_dishonest() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(1)
+        peer(1),
+        "test_data".into()
       )
     );
 
@@ -4581,8 +4603,6 @@ fn test_vote_model_peer_dishonest_consensus() {
 
     let n_peers: u32 = Network::max_model_peers();
     let n_required_voting_peers: u32 = (n_peers as f64 * (peer_removal_threshold as f64 / 10000.0)).ceil() as u32 + 1;
-    log::error!("n_required_voting_peers {:?}", n_required_voting_peers);
-    log::info!("n_required_voting_peers {:?}", n_required_voting_peers);
 
     // increase blocks
     make_model_submittable();
@@ -4608,13 +4628,14 @@ fn test_vote_model_peer_dishonest_consensus() {
 
     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-    make_model_peer_consensus_data_submittable();
+    make_model_peer_dishonesty_consensus_proposable();
 
     assert_ok!(
       Network::propose_model_peer_dishonest(
         RuntimeOrigin::signed(account(0)),
         model_id.clone(),
-        peer(n_peers-1)
+        peer(n_peers-1),
+        "test_data".into()
       )
     );
 
@@ -4631,5 +4652,255 @@ fn test_vote_model_peer_dishonest_consensus() {
     }
 
     post_remove_model_peer_ensures(n_peers-1, model_id.clone());  
+  });
+}
+
+#[test]
+fn test_add_to_delegate_stake() {
+  new_test_ext().execute_with(|| {
+    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+
+    build_model(model_path.clone());
+    let deposit_amount: u128 = 10000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let _ = Balances::deposit_creating(&account(0), deposit_amount);
+
+    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
+      amount,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+
+    if total_model_delegated_stake_shares == 0 {
+      delegate_stake_to_be_added_as_shares = delegate_stake_to_be_added_as_shares.saturating_sub(1000);
+    }
+
+    assert_ok!(
+      Network::add_to_delegate_stake(
+        RuntimeOrigin::signed(account(0)),
+        model_id.clone(),
+        amount,
+      ) 
+    );
+
+    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
+    assert_ne!(delegate_shares, 0);
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_balance = Network::convert_to_balance(
+      delegate_shares,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+    // The first depositor will lose a percentage of their deposit depending on the size
+    // https://docs.openzeppelin.com/contracts/4.x/erc4626#inflation-attack
+    assert_eq!(delegate_balance, delegate_stake_to_be_added_as_shares);
+
+  });
+}
+
+#[test]
+fn test_add_to_delegate_stake_increase_pool_check_balance() {
+  new_test_ext().execute_with(|| {
+    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+
+    build_model(model_path.clone());
+    let deposit_amount: u128 = 10000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let _ = Balances::deposit_creating(&account(0), deposit_amount);
+
+    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
+      amount,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+
+    if total_model_delegated_stake_shares == 0 {
+      delegate_stake_to_be_added_as_shares = delegate_stake_to_be_added_as_shares.saturating_sub(1000);
+    }
+
+    assert_ok!(
+      Network::add_to_delegate_stake(
+        RuntimeOrigin::signed(account(0)),
+        model_id.clone(),
+        amount,
+      ) 
+    );
+
+    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
+    assert_ne!(delegate_shares, 0);
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_balance = Network::convert_to_balance(
+      delegate_shares,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+    // The first depositor will lose a percentage of their deposit depending on the size
+    // https://docs.openzeppelin.com/contracts/4.x/erc4626#inflation-attack
+    assert_eq!(delegate_balance, delegate_stake_to_be_added_as_shares);
+
+    let increase_delegated_stake_amount: u128 = 1000000000000000000000;
+    Network::increase_delegated_stake(
+      model_id.clone(),
+      increase_delegated_stake_amount,
+    );
+
+    // ensure balance has increase
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let mut post_delegate_balance = Network::convert_to_balance(
+      delegate_shares,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+    assert!(delegate_balance < post_delegate_balance);
+    assert_ne!(delegate_balance, post_delegate_balance);
+  });
+}
+
+#[test]
+fn test_remove_to_delegate_stake() {
+  new_test_ext().execute_with(|| {
+    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+
+    build_model(model_path.clone());
+    let deposit_amount: u128 = 10000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let _ = Balances::deposit_creating(&account(0), deposit_amount);
+
+    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
+      amount,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+
+    if total_model_delegated_stake_shares == 0 {
+      delegate_stake_to_be_added_as_shares = delegate_stake_to_be_added_as_shares.saturating_sub(1000);
+    }
+
+    assert_ok!(
+      Network::add_to_delegate_stake(
+        RuntimeOrigin::signed(account(0)),
+        model_id.clone(),
+        amount,
+      ) 
+    );
+
+    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
+    assert_ne!(delegate_shares, 0);
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_balance = Network::convert_to_balance(
+      delegate_shares,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+    // The first depositor will lose a percentage of their deposit depending on the size
+    // https://docs.openzeppelin.com/contracts/4.x/erc4626#inflation-attack
+    assert_eq!(delegate_balance, delegate_stake_to_be_added_as_shares);
+
+    let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
+    let min_required_delegate_unstake_epochs = MinRequiredDelegateUnstakeEpochs::<Test>::get();
+
+    System::set_block_number(System::block_number() + consensus_blocks_interval * min_required_delegate_unstake_epochs);
+
+    let balance = Balances::free_balance(&account(0));
+
+    assert_ok!(
+      Network::remove_delegate_stake(
+        RuntimeOrigin::signed(account(0)),
+        model_id.clone(),
+        delegate_shares,
+      )
+    );
+
+    let post_balance = Balances::free_balance(&account(0));
+    assert_eq!(post_balance, balance + delegate_balance);
+
+  });
+}
+
+#[test]
+fn test_remove_to_delegate_stake_epochs_not_met_err() {
+  new_test_ext().execute_with(|| {
+    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+
+    build_model(model_path.clone());
+    let deposit_amount: u128 = 10000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let _ = Balances::deposit_creating(&account(0), deposit_amount);
+
+    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
+      amount,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+
+    if total_model_delegated_stake_shares == 0 {
+      delegate_stake_to_be_added_as_shares = delegate_stake_to_be_added_as_shares.saturating_sub(1000);
+    }
+
+    assert_ok!(
+      Network::add_to_delegate_stake(
+        RuntimeOrigin::signed(account(0)),
+        model_id.clone(),
+        amount,
+      ) 
+    );
+
+    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
+    assert_ne!(delegate_shares, 0);
+
+    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+
+    let mut delegate_balance = Network::convert_to_balance(
+      delegate_shares,
+      total_model_delegated_stake_shares,
+      total_model_delegated_stake_balance
+    );
+    // The first depositor will lose a percentage of their deposit depending on the size
+    // https://docs.openzeppelin.com/contracts/4.x/erc4626#inflation-attack
+    assert_eq!(delegate_balance, delegate_stake_to_be_added_as_shares);
+
+    assert_err!(
+      Network::remove_delegate_stake(
+        RuntimeOrigin::signed(account(0)),
+        model_id.clone(),
+        delegate_shares,
+      ),
+      Error::<Test>::RequiredDelegateUnstakeEpochsNotMet
+    );
   });
 }

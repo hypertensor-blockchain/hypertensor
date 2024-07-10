@@ -18,7 +18,6 @@ use system::Config;
 use frame_support::dispatch::Vec;
 use num_traits::float::FloatCore;
 use sp_runtime::{PerThing, Percent};
-// use sp_arithmetic::{Percent, PerThing};
 use sp_runtime::Saturating;
 
 impl<T: Config + pallet::Config> Pallet<T> {

@@ -105,10 +105,4 @@ impl<T: Config> Pallet<T> {
 
     unconfirmed_count
   }
-
-  // pub fn get_model_peers(
-  //   model_id: u32,
-  // ) -> Vec<u8> {
-  //   "ls-team/StableBeluga2".into()
-  // }
 }
