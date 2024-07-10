@@ -1,7 +1,7 @@
 use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GrandpaConfig, RuntimeGenesisConfig, Signature,
 	SudoConfig, SystemConfig, WASM_BINARY,
-	DemocracyConfig, 
+	// DemocracyConfig, 
 	NetworkConfig
 };
 use sc_service::ChainType;
@@ -286,7 +286,7 @@ fn testnet_genesis(
 			// Assign network admin rights.
 			key: Some(root_key.clone()),
 		},
-		democracy: DemocracyConfig::default(),
+		// democracy: DemocracyConfig::default(),
 		transaction_payment: Default::default(),
 		network: {
 			let mut peer_index: u8 = 0;
@@ -340,7 +340,7 @@ fn vitalik_genesis(
 			// Assign network admin rights.
 			key: Some(root_key.clone()),
 		},
-		democracy: DemocracyConfig::default(),
+		// democracy: DemocracyConfig::default(),
 		transaction_payment: Default::default(),
 		network: {
 			NetworkConfig {
