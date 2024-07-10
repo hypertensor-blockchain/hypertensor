@@ -861,8 +861,8 @@ impl_runtime_apis! {
 			let result = Network::get_model_peers(model_id);
 			result.encode()
 		}
-		fn get_model_peers_include(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_include(model_id);
+		fn get_model_peers_included(model_id: u32) -> Vec<u8> {
+			let result = Network::get_model_peers_included(model_id);
 			result.encode()
 		}
 		fn get_model_peers_submittable(model_id: u32) -> Vec<u8> {
