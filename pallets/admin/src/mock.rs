@@ -39,9 +39,19 @@ frame_support::construct_runtime!(
     System: system,
     Balances: pallet_balances,
     Network: pallet_network,
+    ModelVoting: pallet_model_voting,
     Admin: pallet_admin,
 	}
 );
+
+pub const MILLISECS_PER_BLOCK: u64 = 6000;
+
+// Time is measured by number of blocks.
+pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+pub const HOURS: BlockNumber = MINUTES * 60;
+pub const DAYS: BlockNumber = HOURS * 24;
+
+pub const YEAR: BlockNumber = DAYS * 365;
 
 pub type BalanceCall = pallet_balances::Call<Test>;
 
@@ -120,9 +130,27 @@ impl pallet_network::Config for Test {
 	type InitialTxRateLimit = ConstU64<0>;
 }
 
+parameter_types! {
+	pub const VotingPeriod: BlockNumber = DAYS * 21;
+	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+}
+
+impl pallet_model_voting::Config for Test {
+	type WeightInfo = ();
+	type RuntimeEvent = RuntimeEvent;
+	type ModelVote = Network;
+	type Currency = Balances;
+	type MaxActivateProposals = ConstU32<32>;
+	type MaxDeactivateProposals = ConstU32<32>;
+	type MaxProposals = ConstU32<32>;
+	type VotingPeriod = VotingPeriod;
+	type EnactmentPeriod = EnactmentPeriod;
+}
+
 impl Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-  type AdminInterface = Network;
+  type NetworkAdminInterface = Network;
+  type ModelVotingAdminInterface = ModelVoting;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
