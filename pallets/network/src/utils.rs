@@ -53,7 +53,7 @@ impl<T: Config> Pallet<T> {
       .expect("blockchain will not exceed 2^64 blocks; QED.")
   }
 
-  pub fn convert_current_block_as_u64(block: BlockNumberFor<T>) -> u64 {
+  pub fn convert_block_as_u64(block: BlockNumberFor<T>) -> u64 {
     TryInto::try_into(block)
       .ok()
       .expect("blockchain will not exceed 2^64 blocks; QED.")
@@ -489,4 +489,30 @@ impl<T: Config> Pallet<T> {
 
     total_submit_eligible_model_peers
   }
+
+  pub fn get_total_dishonesty_voting_model_peers(
+    model_id: u32,
+    block: u64,
+    consensus_blocks_interval: u64,
+    min_required_peer_consensus_dishonesty_epochs: u64
+  ) -> u32 {
+    // Count of eligible to submit consensus data model peers
+    let mut total_submit_eligible_model_peers = 0;
+    
+    // increment total_submit_eligible_model_peers with model peers that are eligible to submit consensus data
+    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
+      let initialized: u64 = model_peer.initialized;
+      if Self::is_epoch_block_eligible(
+        block, 
+        consensus_blocks_interval, 
+        min_required_peer_consensus_dishonesty_epochs, 
+        initialized
+      ) {
+        total_submit_eligible_model_peers += 1;
+      }
+    }
+
+    total_submit_eligible_model_peers
+  }
+
 }

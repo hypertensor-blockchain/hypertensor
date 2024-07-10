@@ -69,7 +69,7 @@ impl<T: Config> Pallet<T> {
     // Ensure divisible by PeerRemovalThreshold
     //  • e.g. if the threshold is .8, we need a minimum of
     ensure!(
-      value >= 10 && value <= max_model_peers && value >= min_value as u32,
+      value >= 9 && value <= max_model_peers && value >= min_value as u32,
       Error::<T>::InvalidMinModelPeers
     );
 
@@ -201,6 +201,28 @@ impl<T: Config> Pallet<T> {
     Ok(())
   }
 
+  pub fn set_min_required_peer_consensus_dishonesty_epochs(value: u64) -> DispatchResult {
+    // Must be at least 1 epoch
+    ensure!(
+      value > 1,
+      Error::<T>::InvalidPeerConsensusDishonestyEpochs
+    );
+
+    let min_required_peer_consensus_submit_epochs = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
+
+    // must be less than required submit epochs
+    ensure!(
+      value < min_required_peer_consensus_submit_epochs,
+      Error::<T>::InvalidPeerConsensusDishonestyEpochs
+    );
+
+    MinRequiredPeerConsensusDishonestyEpochs::<T>::set(value);
+
+    Self::deposit_event(Event::SetMinRequiredPeerConsensusDishonestyEpochs(value));
+
+    Ok(())
+  }
+
   pub fn set_max_outlier_delta_percent(value: u8) -> DispatchResult {
     ensure!(
       value <= 100 as u8,
@@ -215,6 +237,7 @@ impl<T: Config> Pallet<T> {
   }
 
   pub fn set_model_peer_consensus_submit_percent_requirement(value: u128) -> DispatchResult {
+    // Update MinModelPeers before
     let min_model_peer_consensus_submit_count = Self::percent_mul_round_up(MinModelPeers::<T>::get() as u128, value);
 
     // Must be less than 100.00% and greater than 51.00%

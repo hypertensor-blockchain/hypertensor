@@ -89,7 +89,7 @@ impl<T: Config> Pallet<T> {
     // --- Ensure that the stake amount to be removed is above zero.
     ensure!(
       stake_to_be_removed > 0,
-      Error::<T>::NotEnoughStaketoWithdraw
+      Error::<T>::NotEnoughStakeToWithdraw
     );
 
     let account_stake_balance: u128 = AccountModelStake::<T>::get(&account_id, model_id.clone());
@@ -97,7 +97,7 @@ impl<T: Config> Pallet<T> {
     // --- Ensure that the account has enough stake to withdraw.
     ensure!(
       account_stake_balance >= stake_to_be_removed,
-      Error::<T>::NotEnoughStaketoWithdraw
+      Error::<T>::NotEnoughStakeToWithdraw
     );
     
     // if user is still a peer in consensus they must keep the required minimum balance
@@ -252,5 +252,4 @@ impl<T: Config> Pallet<T> {
   > {
     input.try_into().ok()
   }
-
 }

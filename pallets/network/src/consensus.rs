@@ -11,12 +11,12 @@ impl<T: Config> Pallet<T> {
     let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
     let min_required_model_consensus_submit_epochs = MinRequiredModelConsensusSubmitEpochs::<T>::get();
     let model_consensus_unconfirmed_threshold = ModelConsensusUnconfirmedThreshold::<T>::get();
-    // let max_model_peer_seq_consensus_not_sent = MaxModelPeerConsecutiveConsensusNotSent::<T>::get();
     let model_peer_seq_consensus_sent_threshold = ModelPeerConsecutiveConsensusSentThreshold::<T>::get();
     let min_required_peer_consensus_submit_epochs: u64 = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
     let model_consecutive_epochs_threshold = ModelConsecutiveEpochsThreshold::<T>::get();
     let peer_against_consensus_removal_threshold = PeerAgainstConsensusRemovalThreshold::<T>::get();
     let max_model_consensus_unconfirmed_seq_epochs = MaxModelConsensusUnconfirmedConsecutiveEpochs::<T>::get();
+    let peer_removal_threshold = PeerRemovalThreshold::<T>::get();
 
     // Iter each model and check consensus data
     // if any existing models have no submissions
@@ -194,7 +194,7 @@ impl<T: Config> Pallet<T> {
       let model_consecutive_successful_epochs = ModelConsecutiveSuccessfulEpochs::<T>::get(model_id.clone());
       if model_consecutive_successful_epochs >= model_consecutive_epochs_threshold && model_consecutive_successful_epochs % model_consecutive_epochs_threshold == 0 {
         log::info!("Model ID {:?} epoch successful, removing an error", model_id.clone());
-        ModelConsensusEpochsErrors::<T>::mutate(model_id.clone(), |n: &mut u32| n.saturating_less_one());
+        ModelConsensusEpochsErrors::<T>::mutate(model_id.clone(), |n: &mut u32| n.saturating_dec());
       }
 
       // Begin forming consensus..
@@ -245,7 +245,7 @@ impl<T: Config> Pallet<T> {
         // 		2. Removing any peers that are potentially brute forcing peer storage but aren't actually hosting models.
         //			 peers are required to be included in consensus data after `x` epochs of being stored onchain before
         //       they can submit consensus data themselves.
-        if removal_consensus_percentage > PeerRemovalThreshold::<T>::get() {
+        if removal_consensus_percentage > peer_removal_threshold {
           // Model peer is out of consensus
           //  1. Remove model peer
           //  2. Increment AccountPenaltyCount of accounts against this consensus
@@ -498,7 +498,7 @@ impl<T: Config> Pallet<T> {
           //
           if model_peer_seq_consensus_sent >= model_peer_seq_consensus_sent_threshold && model_peer_seq_consensus_sent % model_peer_seq_consensus_sent_threshold == 0 {
             // Less one AccountPenaltyCount
-            AccountPenaltyCount::<T>::mutate(account_id.clone(), |n: &mut u32| n.saturating_less_one());
+            AccountPenaltyCount::<T>::mutate(account_id.clone(), |n: &mut u32| n.saturating_dec());
           }
 
           // Get how many epochs in a row model peer has missed consensus submissions
