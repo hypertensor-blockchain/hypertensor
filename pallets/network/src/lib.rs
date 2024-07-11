@@ -27,7 +27,7 @@ use frame_support::{
 use sp_runtime::RuntimeDebug;
 use scale_info::prelude::string::String;
 use sp_core::OpaquePeerId as PeerId;
-use sp_std::collections::{ btree_map::BTreeMap, btree_set::BTreeSet };
+use sp_std::collections::btree_map::BTreeMap;
 
 #[cfg(test)]
 mod mock;
@@ -2091,7 +2091,7 @@ pub mod pallet {
             let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone());
             let min_model_peers: u32 = MinModelPeers::<T>::get();
             let block: u64 = Self::get_current_block_as_u64();
-            let mut has_min_peers: bool = true;
+            let has_min_peers: bool = true;
             if total_model_peers < min_model_peers {
                 let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
                 let model_peers_initialization_epochs: u64 =
@@ -2480,7 +2480,7 @@ pub mod pallet {
         ) -> DispatchResult {
             ensure_signed(origin.clone())?;
 
-            let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+            let _consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
             let block: u64 = Self::get_current_block_as_u64();
 
             // We can skip `can_remove_or_update_model_peer` because no peers in consensus results
@@ -2515,7 +2515,7 @@ pub mod pallet {
                 Error::<T>::ModelPeerNotExist
             );
 
-            let model_peer: ModelPeer<T::AccountId> = ModelPeersData::<T>::get(
+            let _model_peer: ModelPeer<T::AccountId> = ModelPeersData::<T>::get(
                 model_id.clone(),
                 account_id.clone()
             );
@@ -2699,7 +2699,7 @@ pub mod pallet {
             let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
             let block: u64 = Self::get_current_block_as_u64();
 
-            let mut model_account_delegate_stakes: BTreeMap<
+            let model_account_delegate_stakes: BTreeMap<
                 T::AccountId,
                 u64
             > = ModelAccountDelegateStake::<T>::get(model_id.clone());
@@ -2974,7 +2974,7 @@ pub mod pallet {
         // Testing purposes only
         #[pallet::call_index(15)]
         #[pallet::weight({ 0 })]
-        pub fn form_consensus(origin: OriginFor<T>) -> DispatchResult {
+        pub fn form_consensus(_origin: OriginFor<T>) -> DispatchResult {
             let block: u64 = Self::get_current_block_as_u64();
 
             let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
@@ -2991,7 +2991,7 @@ pub mod pallet {
         // Testing purposes only
         #[pallet::call_index(16)]
         #[pallet::weight({ 0 })]
-        pub fn do_generate_emissions(origin: OriginFor<T>) -> DispatchResult {
+        pub fn do_generate_emissions(_origin: OriginFor<T>) -> DispatchResult {
             let block: u64 = Self::get_current_block_as_u64();
 
             let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
@@ -3021,7 +3021,7 @@ pub mod pallet {
         // Testing purposes only
         #[pallet::call_index(17)]
         #[pallet::weight({ 0 })]
-        pub fn vote_model(origin: OriginFor<T>, model_path: Vec<u8>) -> DispatchResult {
+        pub fn vote_model(_origin: OriginFor<T>, model_path: Vec<u8>) -> DispatchResult {
             ModelActivated::<T>::insert(model_path.clone(), true);
             Ok(())
         }
@@ -3029,7 +3029,7 @@ pub mod pallet {
         // Testing purposes only
         #[pallet::call_index(18)]
         #[pallet::weight({ 0 })]
-        pub fn vote_model_out(origin: OriginFor<T>, model_path: Vec<u8>) -> DispatchResult {
+        pub fn vote_model_out(_origin: OriginFor<T>, model_path: Vec<u8>) -> DispatchResult {
             ModelActivated::<T>::insert(model_path.clone(), false);
             Ok(())
         }
@@ -3037,7 +3037,7 @@ pub mod pallet {
         // Testing purposes only
         #[pallet::call_index(19)]
         #[pallet::weight({ 0 })]
-        pub fn form_consensus_no_consensus_weight_test(origin: OriginFor<T>) -> DispatchResult {
+        pub fn form_consensus_no_consensus_weight_test(_origin: OriginFor<T>) -> DispatchResult {
             let block: u64 = Self::get_current_block_as_u64();
 
             let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
@@ -3053,7 +3053,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn is_model_eligible(
+        fn _is_model_eligible(
             model_id: u32,
             model_path: Vec<u8>,
             model_initialized: u64
@@ -3183,7 +3183,7 @@ pub mod pallet {
             );
         }
 
-        fn offchain_worker(block_number: BlockNumberFor<T>) {
+        fn offchain_worker(_block_number: BlockNumberFor<T>) {
             // designated for testnet v2.0
             //
             // Call peers at random to ensure model is running
@@ -3328,7 +3328,7 @@ pub mod pallet {
 /// Return the weight of a dispatch call result as an `Option`.
 ///
 /// Will return the weight regardless of what the state of the result is.
-fn get_result_weight(result: DispatchResultWithPostInfo) -> Option<Weight> {
+fn _get_result_weight(result: DispatchResultWithPostInfo) -> Option<Weight> {
     match result {
         Ok(post_info) => post_info.actual_weight,
         Err(err) => err.post_info.actual_weight,
@@ -3394,7 +3394,7 @@ impl<T: Config, AccountId> ModelVote<AccountId> for Pallet<T> {
     fn get_min_stake_balance() -> u128 {
         MinStakeBalance::<T>::get()
     }
-    fn is_submittable_model_peer_account(account_id: AccountId) -> bool {
+    fn is_submittable_model_peer_account(_account_id: AccountId) -> bool {
         true
     }
 }

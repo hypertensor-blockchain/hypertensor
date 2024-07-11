@@ -2,7 +2,10 @@
 name = "hypertensor-node"
 version = "4.0.0-dev"
 description = "Substrate ndoe for DECENTRALIZED, INCENTIVIZED, AND DEMOCRATIZED AI"
-authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
+authors = [
+	"Substrate DevHub <https://github.com/substrate-developer-hub>",
+	"Hypertensor Team <https://github.com/hypertensor-blockchain>",
+]
 homepage = "https://hypertensor.org/"
 edition = "2021"
 license = "MIT-0"

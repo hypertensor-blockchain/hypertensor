@@ -21,7 +21,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_add_delegate_stake(
         origin: T::RuntimeOrigin,
         model_id: u32,
-        hotkey: T::AccountId,
+        _hotkey: T::AccountId,
         delegate_stake_to_be_added: u128
     ) -> DispatchResult {
         let account_id: T::AccountId = ensure_signed(origin)?;
@@ -94,7 +94,7 @@ impl<T: Config> Pallet<T> {
 
         // --- Mitigate inflation attack
         if total_model_delegated_stake_shares == 0 {
-            TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |mut n| {
+            TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |n| {
                 *n += 1000;
             });
             delegate_stake_to_be_added_as_shares =
@@ -124,7 +124,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_remove_delegate_stake(
         origin: T::RuntimeOrigin,
         model_id: u32,
-        hotkey: T::AccountId,
+        _hotkey: T::AccountId,
         delegate_stake_shares_to_be_removed: u128
         // delegate_stake_to_be_removed: u128,
     ) -> DispatchResult {
@@ -187,7 +187,7 @@ impl<T: Config> Pallet<T> {
             delegate_stake_shares_to_be_removed
         );
 
-        let remaining_account_delegate_stake_shares: u128 =
+        let _remaining_account_delegate_stake_shares: u128 =
             AccountModelDelegateStakeShares::<T>::get(&account_id, model_id);
 
         // --- 9. We add the balancer to the account_id.  If the above fails we will not credit this account_id.
@@ -220,12 +220,12 @@ impl<T: Config> Pallet<T> {
         );
 
         // -- increase total model delegate stake balance
-        TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |n| {
             *n += amount;
         });
 
         // -- increase total model delegate stake shares
-        TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |n| {
             *n += shares;
         });
     }
@@ -244,12 +244,12 @@ impl<T: Config> Pallet<T> {
         );
 
         // -- increase total model delegate stake balance
-        TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |n| {
             *n += amount;
         });
 
         // -- decrease total model delegate stake shares
-        TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |n| {
             *n -= shares;
         });
     }
@@ -293,7 +293,7 @@ impl<T: Config> Pallet<T> {
     /// Rewards are deposited here
     pub fn increase_delegated_stake(model_id: u32, amount: u128) {
         // -- increase total model delegate stake
-        TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |n| {
             *n += amount;
         });
     }
@@ -319,11 +319,11 @@ impl<T: Config> Pallet<T> {
     //   input.try_into().ok()
     // }
 
-    pub fn get_delegate_stake_balance(model_id: u32, account_id: &T::AccountId) -> u128 {
+    pub fn get_delegate_stake_balance(_model_id: u32, _account_id: &T::AccountId) -> u128 {
         0
     }
 
-    pub fn get_delegate_shares_balance(model_id: u32, account_id: &T::AccountId) -> u128 {
+    pub fn get_delegate_shares_balance(_model_id: u32, _account_id: &T::AccountId) -> u128 {
         0
     }
 

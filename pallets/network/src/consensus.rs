@@ -312,7 +312,7 @@ impl<T: Config> Pallet<T> {
                     // Model peer is out of consensus
                     //  1. Remove model peer
                     //  2. Increment AccountPenaltyCount of accounts against this consensus
-                    let consensus_result_peer_id: PeerId = peer_consensus_result.peer_id;
+                    let _consensus_result_peer_id: PeerId = peer_consensus_result.peer_id;
 
                     // Remove model peer storage and consensus data
                     log::info!(

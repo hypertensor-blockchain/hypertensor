@@ -131,14 +131,12 @@ impl<T: Config> Pallet<T> {
             // Get the remaining.
             let remainder: f64 = index - lower_index;
             // Add the remaining to the lowerindex value.
-            return (
-                (array[lower_index as usize] as f64) +
+            return (array[lower_index as usize] as f64) +
                 remainder *
                     (
                         ((array[(lower_index as usize) + 1] as f64) -
                             (array[lower_index as usize] as f64)) as f64
-                    )
-            );
+                    );
         }
     }
 
@@ -472,7 +470,7 @@ impl<T: Config> Pallet<T> {
 
     // TODO: ?
     pub fn get_account_slash_percentage(account_id: T::AccountId) -> u128 {
-        let model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
+        let _model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
         0
     }
 

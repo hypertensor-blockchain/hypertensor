@@ -16,8 +16,6 @@
 use super::*;
 use system::Config;
 use frame_support::dispatch::Vec;
-use num_traits::float::FloatCore;
-use sp_runtime::{ PerThing, Percent };
 use sp_runtime::Saturating;
 
 impl<T: Config + pallet::Config> Pallet<T> {
@@ -400,9 +398,9 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 // @to-do: compute the rewards from the stake rewards vault to give on epoch based on ideal stake
 //				 based on total model, peers, and eligible stake balance
-pub fn compute_rewards(
-    total_model_peers: u128,
-    total_stake: u128,
+pub fn _compute_rewards(
+    _total_model_peers: u128,
+    _total_stake: u128,
     total_vault_balance: u128
 ) -> u128 {
     total_vault_balance

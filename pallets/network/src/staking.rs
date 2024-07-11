@@ -19,7 +19,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_add_stake(
         origin: T::RuntimeOrigin,
         model_id: u32,
-        hotkey: T::AccountId,
+        _hotkey: T::AccountId,
         stake_to_be_added: u128
     ) -> DispatchResult {
         let account_id: T::AccountId = ensure_signed(origin)?;
@@ -74,7 +74,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_remove_stake(
         origin: T::RuntimeOrigin,
         model_id: u32,
-        hotkey: T::AccountId,
+        _hotkey: T::AccountId,
         is_peer: bool,
         stake_to_be_removed: u128
     ) -> DispatchResult {
@@ -145,17 +145,17 @@ impl<T: Config> Pallet<T> {
         );
 
         // -- increase account_id total stake
-        TotalAccountStake::<T>::mutate(account_id, |mut n| {
+        TotalAccountStake::<T>::mutate(account_id, |n| {
             *n += amount;
         });
 
         // -- increase total model stake
-        TotalModelStake::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelStake::<T>::mutate(model_id.clone(), |n| {
             *n += amount;
         });
 
         // -- increase total stake overall
-        TotalStake::<T>::mutate(|mut n| {
+        TotalStake::<T>::mutate(|n| {
             *n += amount;
         });
     }
@@ -169,17 +169,17 @@ impl<T: Config> Pallet<T> {
         );
 
         // -- decrease account_id total stake
-        TotalAccountStake::<T>::mutate(account_id, |mut n| {
+        TotalAccountStake::<T>::mutate(account_id, |n| {
             *n -= amount;
         });
 
         // -- decrease total stake overall
-        TotalStake::<T>::mutate(|mut n| {
+        TotalStake::<T>::mutate(|n| {
             *n -= amount;
         });
 
         // -- decrease total model stake
-        TotalModelStake::<T>::mutate(model_id.clone(), |mut n| {
+        TotalModelStake::<T>::mutate(model_id.clone(), |n| {
             *n -= amount;
         });
     }
@@ -225,7 +225,7 @@ impl<T: Config> Pallet<T> {
         account_id: &T::AccountId,
         amount: <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance
     ) {
-        T::Currency::deposit_creating(&account_id, amount); // Infallibe
+        let _ = T::Currency::deposit_creating(&account_id, amount); // Infallibe
     }
 
     pub fn get_coldkey_balance(
