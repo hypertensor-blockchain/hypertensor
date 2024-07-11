@@ -16,19 +16,16 @@
 // https://blog.oak.tech/tutorial-benchmarking-for-parity-substrate-pallet-development-9cb68bf87ea2
 // https://github.com/paritytech/substrate/blob/master/.maintain/frame-weight-template.hbs
 // Executed Command:
-// ./target/release/node-template benchmark pallet --chain=dev --wasm-execution=compiled --pallet=pallet_admin --extrinsic=* --steps=1 --repeat=1 --output="pallets/admin/src/weights.rs" --template ./.maintain/frame-weight-template.hbs
+// ./target/release/hypertensor-node benchmark pallet --chain=dev --wasm-execution=compiled --pallet=pallet_admin --extrinsic=* --steps=1 --repeat=1 --output="pallets/admin/src/weights.rs" --template ./.maintain/frame-weight-template.hbs
 
 // cargo build --release --features runtime-benchmarks
 // cargo test --release --features runtime-benchmarks
 // cargo build --package pallet-admin --features runtime-benchmarks
 use super::*;
 // use crate::mock::*;
-use frame_benchmarking::{account, benchmarks, whitelist_account, BenchmarkError};
-use frame_support::{
-	assert_noop, assert_ok,
-	traits::Currency,
-};
-use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
+use frame_benchmarking::{ account, benchmarks, whitelist_account, BenchmarkError };
+use frame_support::{ assert_noop, assert_ok, traits::Currency };
+use frame_system::{ pallet_prelude::BlockNumberFor, RawOrigin };
 use crate::Pallet as Admin;
 use frame_support::dispatch::Vec;
 use scale_info::prelude::vec;

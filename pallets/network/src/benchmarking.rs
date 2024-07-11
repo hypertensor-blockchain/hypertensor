@@ -16,7 +16,7 @@
 // https://blog.oak.tech/tutorial-benchmarking-for-parity-substrate-pallet-development-9cb68bf87ea2
 // https://github.com/paritytech/substrate/blob/master/.maintain/frame-weight-template.hbs
 // Executed Command:
-// ./target/release/node-template benchmark pallet --chain=dev --wasm-execution=compiled
+// ./target/release/hypertensor-node benchmark pallet --chain=dev --wasm-execution=compiled
 // --pallet=pallet_network --extrinsic=* --steps=50 --repeat=20
 // --output="pallets/network/src/weights.rs" --template ./.maintain/frame-weight-template.hbs
 

@@ -4549,7 +4549,7 @@ fn test_vote_model_peer_dishonest_consensus() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
