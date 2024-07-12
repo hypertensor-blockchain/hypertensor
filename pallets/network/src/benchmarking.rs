@@ -180,7 +180,7 @@ pub fn get_current_block_as_u64<T: frame_system::Config>() -> u64 {
 }
 
 benchmarks! {
-  add_model {
+	add_model {
 		let total_models = Network::<T>::total_models();
 
 		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
@@ -401,7 +401,7 @@ benchmarks! {
 		let block = frame_system::Pallet::<T>::block_number();
 
 		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
-	let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<T>::get();
+		let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<T>::get();
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_unstake_epochs));
 
 		let remove_stake_amount: u128 = 10;
@@ -455,7 +455,7 @@ benchmarks! {
 			let peer_account = funded_account::<T>("peer", n.into());
 			whitelist_account!(peer_account);
 			Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
-	}
+		}
 
 		make_model_peer_consensus_data_submittable::<T>();
 
@@ -513,7 +513,7 @@ benchmarks! {
 			let peer_account = funded_account::<T>("peer", n.into());
 			whitelist_account!(peer_account);
 			Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
-	}
+		}
 
 		make_model_peer_consensus_data_submittable::<T>();
 
@@ -545,7 +545,7 @@ benchmarks! {
 			let model_path = format!("petals-team-{m}/StableBeluga");
 			Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone().into());
 			let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone().into());
-	}
+		}
 
 		make_model_initialized::<T>();
 
@@ -565,7 +565,7 @@ benchmarks! {
 				whitelist_account!(peer_account);
 				let __ = Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
 			}
-	}
+		}
 
 		// increase blocks for peers to submit data
 		make_model_peer_consensus_data_submittable::<T>();
@@ -593,13 +593,13 @@ benchmarks! {
 					model_peer_data.clone()
 				);
 			}
-	}
+		}
 
 		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
-	frame_system::Pallet::<T>::set_block_number(
-		consensus_blocks_interval + (block - (block % consensus_blocks_interval))
-	);
+		frame_system::Pallet::<T>::set_block_number(
+			consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+		);
 	}: form_consensus(RawOrigin::Signed(caller.clone()))
 	verify {
 		assert_eq!(Network::<T>::total_models(), max_models, "TotalModels incorrect.");
@@ -622,7 +622,7 @@ benchmarks! {
 			for n in 0..n_peers {
 				assert_eq!(Network::<T>::total_model_peers(m+1), n_peers as u32, "TotalModelPeers incorrect.");
 			}
-	}
+		}
 	}
 
 	// form_consensus_data_2 {
@@ -825,7 +825,7 @@ benchmarks! {
 			let model_path = format!("petals-team-{m}/StableBeluga");
 			Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone().into());
 			let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone().into());
-	}
+		}
 
 		make_model_initialized::<T>();
 
@@ -845,7 +845,7 @@ benchmarks! {
 				whitelist_account!(peer_account);
 				let __ = Network::<T>::add_model_peer(RawOrigin::Signed(peer_account.clone()).into(), model_id.clone(), peer(n), "172.20.54.234".into(), 8888, stake_amount);
 			}
-	}
+		}
 
 		// increase blocks for peers to submit data
 		make_model_peer_consensus_data_submittable::<T>();
@@ -922,7 +922,7 @@ benchmarks! {
 			let model_path = format!("petals-team-{m}/StableBeluga");
 			Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone().into());
 			let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone().into());
-	}
+		}
 
 		make_model_initialized::<T>();
 
@@ -938,71 +938,71 @@ benchmarks! {
 		// use stake amounts that will create models(s) that will be greater than the max weight
 		let min_stake: u128 = get_min_stake_balance::<T>();
 		let amount_stake: Vec<u128> = vec![
-	  min_stake + 1000,
-	  min_stake + 800,
-	  min_stake + 200,
-	  min_stake + 300,
-	  min_stake + 14,
-	  min_stake + 12,
-	  min_stake + 10,
-	  min_stake + 200,
-	  min_stake + 1,
-	  min_stake + 1,
 			min_stake + 1000,
-	  min_stake + 800,
-	  min_stake + 200,
-	  min_stake + 300,
-	  min_stake + 14,
-	  min_stake + 12,
-	  min_stake + 10,
-	  min_stake + 200,
-	  min_stake + 1,
-	  min_stake + 1,
-			min_stake + 1000,
-	  min_stake + 800,
-	  min_stake + 200,
-	  min_stake + 300,
-	  min_stake + 14,
-	  min_stake + 12,
-	  min_stake + 10,
-	  min_stake + 200,
-	  min_stake + 1,
-	  min_stake + 1,
-			min_stake + 1000,
-	  min_stake + 800,
-	  min_stake + 200,
-	  min_stake + 300,
-	  min_stake + 14,
-	  min_stake + 12,
-	  min_stake + 10,
-	  min_stake + 200,
-	  min_stake + 1,
-	  min_stake + 1,
-			min_stake + 1000,
-	  min_stake + 800,
-	  min_stake + 200,
-	  min_stake + 300,
-	  min_stake + 14,
-	  min_stake + 12,
-	  min_stake + 10,
-	  min_stake + 200,
-	  min_stake + 1,
-	  min_stake + 1,
-			min_stake + 1000,
-	  min_stake + 800,
-	  min_stake + 200,
-	  min_stake + 300,
-	  min_stake + 14,
-	  min_stake + 12,
-	  min_stake + 10,
-	  min_stake + 1,
-	  min_stake + 1,
-	  min_stake + 1,
-	  min_stake + 1,
-	  min_stake + 1,
-	  min_stake + 1,
-	  min_stake + 1,
-	];
+			min_stake + 800,
+			min_stake + 200,
+			min_stake + 300,
+			min_stake + 14,
+			min_stake + 12,
+			min_stake + 10,
+			min_stake + 200,
+			min_stake + 1,
+			min_stake + 1,
+					min_stake + 1000,
+			min_stake + 800,
+			min_stake + 200,
+			min_stake + 300,
+			min_stake + 14,
+			min_stake + 12,
+			min_stake + 10,
+			min_stake + 200,
+			min_stake + 1,
+			min_stake + 1,
+					min_stake + 1000,
+			min_stake + 800,
+			min_stake + 200,
+			min_stake + 300,
+			min_stake + 14,
+			min_stake + 12,
+			min_stake + 10,
+			min_stake + 200,
+			min_stake + 1,
+			min_stake + 1,
+					min_stake + 1000,
+			min_stake + 800,
+			min_stake + 200,
+			min_stake + 300,
+			min_stake + 14,
+			min_stake + 12,
+			min_stake + 10,
+			min_stake + 200,
+			min_stake + 1,
+			min_stake + 1,
+					min_stake + 1000,
+			min_stake + 800,
+			min_stake + 200,
+			min_stake + 300,
+			min_stake + 14,
+			min_stake + 12,
+			min_stake + 10,
+			min_stake + 200,
+			min_stake + 1,
+			min_stake + 1,
+					min_stake + 1000,
+			min_stake + 800,
+			min_stake + 200,
+			min_stake + 300,
+			min_stake + 14,
+			min_stake + 12,
+			min_stake + 10,
+			min_stake + 1,
+			min_stake + 1,
+			min_stake + 1,
+			min_stake + 1,
+			min_stake + 1,
+			min_stake + 1,
+			min_stake + 1,
+		];
 		let mut amount_staked: u128 = 0;
 
 		for m in total_models..m_models {
@@ -1022,9 +1022,9 @@ benchmarks! {
 					stake_amount
 				);
 			}
-	}
+		}
 
-		// increase blocks for peers to submit data
+			// increase blocks for peers to submit data
 		make_model_peer_consensus_data_submittable::<T>();
 		// let block = frame_system::Pallet::<T>::block_number();
 		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
@@ -1055,13 +1055,13 @@ benchmarks! {
 				n_peers as usize,
 				"ModelPeerConsensusResults len mismatch."
 			);
-	}
+		}
 
 		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
-	frame_system::Pallet::<T>::set_block_number(
-	  consensus_blocks_interval + (block - (block % consensus_blocks_interval))
-	);
+		frame_system::Pallet::<T>::set_block_number(
+			consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+		);
 
 		// call form_consensus
 		Network::<T>::form_consensus(RawOrigin::Signed(caller.clone()).into());
@@ -1083,13 +1083,13 @@ benchmarks! {
 		);
 
 		let expected_max_post_vault_balance: u128 = (amount_staked as f64 * 0.01) as u128;
-	let post_total_vault_balance: u128 = StakeVaultBalance::<T>::get();
+		let post_total_vault_balance: u128 = StakeVaultBalance::<T>::get();
 		// log::info!("expected_max_post_vault_balance {:?}", expected_max_post_vault_balance);
 		// log::error!("expected_max_post_vault_balance {:?}", expected_max_post_vault_balance);
 		// log::info!("post_total_vault_balance        {:?}", post_total_vault_balance);
 		// log::error!("post_total_vault_balance        {:?}", post_total_vault_balance);
 		assert!(post_total_vault_balance > 0, "Incorrect expected stake balance.");
-	// assert!(post_total_vault_balance <= expected_max_post_vault_balance, "Incorrect expected stake balance.");
+		// assert!(post_total_vault_balance <= expected_max_post_vault_balance, "Incorrect expected stake balance.");
 	}
 
 	form_consensus_no_consensus_weight_test {
@@ -1099,9 +1099,9 @@ benchmarks! {
 
 		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
-	frame_system::Pallet::<T>::set_block_number(
-	  consensus_blocks_interval + (block - (block % consensus_blocks_interval))
-	);
+		frame_system::Pallet::<T>::set_block_number(
+			consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+		);
 	}: form_consensus_no_consensus_weight_test(RawOrigin::Signed(caller.clone()))
 	verify {
 		assert_eq!(Network::<T>::total_models(), total_models, "TotalModels incorrect.");

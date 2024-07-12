@@ -53,7 +53,7 @@ mod info;
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use frame_support::{ pallet_prelude::* };
+    use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use serde::{ Deserialize, Serialize };
     use sp_std::{ prelude::*, str };
@@ -2709,7 +2709,7 @@ pub mod pallet {
                 None => 0,
             };
 
-            log::error!("block_added {:?}", block_added);
+            // log::error!("block_added {:?}", block_added);
 
             // We don't ensure! if the account add block is zero
             // If they have no stake, it will be ensure!'d in the delegate_staking.rs
@@ -3252,15 +3252,15 @@ pub mod pallet {
             };
 
             // Activate model
-            ModelActivated::<T>::insert(self.model_path.clone(), true);
-            // Store unique path
-            ModelPaths::<T>::insert(self.model_path.clone(), model_id.clone());
-            // Store model data
-            ModelsData::<T>::insert(model_id.clone(), model_data.clone());
-            // Increase total models count
-            TotalModels::<T>::mutate(|n: &mut u32| {
-                *n += 1;
-            });
+            // ModelActivated::<T>::insert(self.model_path.clone(), true);
+            // // Store unique path
+            // ModelPaths::<T>::insert(self.model_path.clone(), model_id.clone());
+            // // Store model data
+            // ModelsData::<T>::insert(model_id.clone(), model_data.clone());
+            // // Increase total models count
+            // TotalModels::<T>::mutate(|n: &mut u32| {
+            //     *n += 1;
+            // });
 
             // StakeVaultBalance::<T>::mutate(|n: &mut u128| *n += 10000000000000000000);
             // let mut count = 0;

@@ -21,8 +21,6 @@ use sp_core::OpaquePeerId;
 // use multihash;
 // use parity_multihash::Multihash;
 // use parity_multihash::{encode, Hash, Multihash};
-use sc_network::multiaddr::multihash::Multihash;
-use sc_network::PeerId;
 use sp_core::crypto::Ss58Codec;
 
 // The URL for the telemetry server.
