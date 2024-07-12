@@ -1,5 +1,8 @@
 {
     "cSpell.words": [
-        "jsonrpsee"
-    ]
+        "Dispatchable",
+        "jsonrpsee",
+        "unconfirm"
+    ],
+    "cargo.automaticCheck": false
 }

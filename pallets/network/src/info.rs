@@ -2,108 +2,94 @@ use super::*;
 use frame_support::dispatch::Vec;
 
 impl<T: Config> Pallet<T> {
-  pub fn get_model_peers(
-    model_id: u32,
-  ) -> Vec<ModelPeer<T::AccountId>> {
-    if !ModelsData::<T>::contains_key(model_id.clone()) {
-      return Vec::new();
+    pub fn get_model_peers(model_id: u32) -> Vec<ModelPeer<T::AccountId>> {
+        if !ModelsData::<T>::contains_key(model_id.clone()) {
+            return Vec::new();
+        }
+
+        let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
+
+        for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
+            model_peers.push(model_peer);
+        }
+        model_peers
     }
 
-    let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
+    pub fn get_model_peers_included(model_id: u32) -> Vec<ModelPeer<T::AccountId>> {
+        if !ModelsData::<T>::contains_key(model_id.clone()) {
+            return Vec::new();
+        }
 
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      model_peers.push(model_peer);
-    }
-    model_peers
-  }
+        let block: u64 = Self::get_current_block_as_u64();
+        let interval: u64 = ConsensusBlocksInterval::<T>::get();
+        let min_required_epochs: u64 = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
 
-  pub fn get_model_peers_included(
-    model_id: u32,
-  ) -> Vec<ModelPeer<T::AccountId>> {
-    if !ModelsData::<T>::contains_key(model_id.clone()) {
-      return Vec::new();
-    }
+        let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
 
-    let block: u64 = Self::get_current_block_as_u64();
-    let interval: u64 = ConsensusBlocksInterval::<T>::get();
-    let min_required_epochs: u64 = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
+        for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
+            let account_id: T::AccountId = model_peer.clone().account_id;
 
-    let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
+            let account_eligible: bool = Self::is_account_eligible(account_id);
 
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      let account_id: T::AccountId = model_peer.clone().account_id;
+            if !account_eligible {
+                continue;
+            }
 
-      let account_eligible: bool = Self::is_account_eligible(account_id);
+            let initialized: u64 = model_peer.clone().initialized;
 
-      if !account_eligible {
-        continue
-      }
+            let do_include: bool =
+                block >= Self::get_eligible_epoch_block(interval, initialized, min_required_epochs);
 
-      let initialized: u64 = model_peer.clone().initialized;
+            if !do_include {
+                continue;
+            }
 
-      let do_include: bool = block >= Self::get_eligible_epoch_block(
-        interval, 
-        initialized, 
-        min_required_epochs
-      );
-
-      if !do_include {
-        continue
-      }
-
-      model_peers.push(model_peer);
-    }
-    model_peers
-  }
-
-  pub fn get_model_peers_submittable(
-    model_id: u32,
-  ) -> Vec<ModelPeer<T::AccountId>> {
-    if !ModelsData::<T>::contains_key(model_id.clone()) {
-      return Vec::new();
+            model_peers.push(model_peer);
+        }
+        model_peers
     }
 
-    let block: u64 = Self::get_current_block_as_u64();
-    let interval: u64 = ConsensusBlocksInterval::<T>::get();
-    let min_required_epochs: u64 = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
+    pub fn get_model_peers_submittable(model_id: u32) -> Vec<ModelPeer<T::AccountId>> {
+        if !ModelsData::<T>::contains_key(model_id.clone()) {
+            return Vec::new();
+        }
 
-    let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
+        let block: u64 = Self::get_current_block_as_u64();
+        let interval: u64 = ConsensusBlocksInterval::<T>::get();
+        let min_required_epochs: u64 = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
 
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      let account_id: T::AccountId = model_peer.clone().account_id;
+        let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
 
-      let account_eligible: bool = Self::is_account_eligible(account_id);
+        for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
+            let account_id: T::AccountId = model_peer.clone().account_id;
 
-      if !account_eligible {
-        continue
-      }
+            let account_eligible: bool = Self::is_account_eligible(account_id);
 
-      let initialized: u64 = model_peer.clone().initialized;
+            if !account_eligible {
+                continue;
+            }
 
-      let do_include: bool = block >= Self::get_eligible_epoch_block(
-        interval, 
-        initialized, 
-        min_required_epochs
-      );
+            let initialized: u64 = model_peer.clone().initialized;
 
-      if !do_include {
-        continue
-      }
+            let do_include: bool =
+                block >= Self::get_eligible_epoch_block(interval, initialized, min_required_epochs);
 
-      model_peers.push(model_peer);
-    }
-    model_peers
-  }
+            if !do_include {
+                continue;
+            }
 
-  pub fn get_model_peers_model_unconfirmed_count(
-    model_id: u32,
-  ) -> u32 {
-    if !ModelsData::<T>::contains_key(model_id.clone()) {
-      return 0;
+            model_peers.push(model_peer);
+        }
+        model_peers
     }
 
-    let unconfirmed_count = ModelConsensusEpochUnconfirmedCount::<T>::get(model_id.clone());
+    pub fn get_model_peers_model_unconfirmed_count(model_id: u32) -> u32 {
+        if !ModelsData::<T>::contains_key(model_id.clone()) {
+            return 0;
+        }
 
-    unconfirmed_count
-  }
+        let unconfirmed_count = ModelConsensusEpochUnconfirmedCount::<T>::get(model_id.clone());
+
+        unconfirmed_count
+    }
 }
