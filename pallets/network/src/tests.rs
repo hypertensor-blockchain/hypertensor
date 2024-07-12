@@ -19,9 +19,7 @@ use crate::Error;
 use crate::ModelPeerData;
 // use frame_support::traits::OriginTrait;
 use sp_core::OpaquePeerId as PeerId;
-use frame_support::{ assert_noop, assert_ok, assert_err };
-use log::info;
-use sp_core::{ H256, U256 };
+use frame_support::{ assert_ok, assert_err };
 // use parity_scale_codec::Decode;
 use frame_support::traits::Currency;
 use crate::{
@@ -818,7 +816,7 @@ fn test_add_model_peer_remove_readd_err() {
 
         let deposit_amount: u128 = 10000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -863,7 +861,7 @@ fn test_add_model_peer_remove_readd() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -914,7 +912,7 @@ fn test_add_model_peer_remove_stake_partial_readd() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -974,7 +972,7 @@ fn test_add_model_peer_remove_stake_readd() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -1064,7 +1062,7 @@ fn test_update_model_peer_peer_id_existing_err() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -1100,7 +1098,7 @@ fn test_update_model_peer_invalid_epoch_err() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -1147,7 +1145,7 @@ fn test_update_model_peer_during_invalid_block_err() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -1185,7 +1183,7 @@ fn test_update_model_peer_during_submit_epoch_err() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -1221,7 +1219,7 @@ fn test_update_model_peer() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -1480,7 +1478,7 @@ fn test_submit_consensus_len_err() {
         let n_peers: u32 = Network::max_model_peers();
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
@@ -1518,7 +1516,7 @@ fn test_submit_consensus_min_peers_err() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
 
@@ -3065,7 +3063,7 @@ fn test_form_consensus() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3146,7 +3144,7 @@ fn test_form_consensus_with_3_peers() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3227,7 +3225,7 @@ fn test_form_consensus_with_4_peers() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3308,7 +3306,7 @@ fn test_form_consensus_with_5_peers() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3391,7 +3389,7 @@ fn test_form_consensus_remove_peer() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3449,7 +3447,7 @@ fn test_form_consensus_peer_submission_epochs() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3748,7 +3746,7 @@ fn test_propose_model_peer_dishonest_proposer_model_peer_exists_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3797,7 +3795,7 @@ fn test_propose_model_peer_dishonest_proposer_not_submittable() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3936,7 +3934,7 @@ fn test_propose_model_peer_dishonest() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4000,7 +3998,7 @@ fn test_vote_model_peer_dishonest_model_peer_exists_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4059,7 +4057,7 @@ fn test_vote_model_peer_dishonest_proposer_not_submittable() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4130,7 +4128,7 @@ fn test_vote_model_peer_dishonest_min_model_peers_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let _amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4191,7 +4189,7 @@ fn test_vote_model_peer_dishonest_peer_id_exists_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4250,7 +4248,7 @@ fn test_vote_model_peer_dishonest_not_proposed_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4298,7 +4296,7 @@ fn test_vote_model_peer_dishonest_period_over_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4359,7 +4357,7 @@ fn test_vote_model_peer_dishonest_duplicate_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4426,7 +4424,7 @@ fn test_vote_model_peer_dishonest_period_passed_error() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4487,7 +4485,7 @@ fn test_vote_model_peer_dishonest() {
 
         let deposit_amount: u128 = 1000000000000000000000000;
         let amount: u128 = 1000000000000000000000;
-        let mut amount_staked: u128 = 0;
+        let amount_staked: u128 = 0;
 
         System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -4647,7 +4645,7 @@ fn test_add_to_delegate_stake() {
             model_id.clone()
         );
 
-        let mut delegate_balance = Network::convert_to_balance(
+        let delegate_balance = Network::convert_to_balance(
             delegate_shares,
             total_model_delegated_stake_shares,
             total_model_delegated_stake_balance
@@ -4710,7 +4708,7 @@ fn test_add_to_delegate_stake_increase_pool_check_balance() {
             model_id.clone()
         );
 
-        let mut delegate_balance = Network::convert_to_balance(
+        let delegate_balance = Network::convert_to_balance(
             delegate_shares,
             total_model_delegated_stake_shares,
             total_model_delegated_stake_balance
@@ -4729,7 +4727,7 @@ fn test_add_to_delegate_stake_increase_pool_check_balance() {
         let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(
             model_id.clone()
         );
-        let mut post_delegate_balance = Network::convert_to_balance(
+        let post_delegate_balance = Network::convert_to_balance(
             delegate_shares,
             total_model_delegated_stake_shares,
             total_model_delegated_stake_balance
@@ -4791,7 +4789,7 @@ fn test_remove_to_delegate_stake() {
             model_id.clone()
         );
 
-        let mut delegate_balance = Network::convert_to_balance(
+        let delegate_balance = Network::convert_to_balance(
             delegate_shares,
             total_model_delegated_stake_shares,
             total_model_delegated_stake_balance
@@ -4875,7 +4873,7 @@ fn test_remove_to_delegate_stake_epochs_not_met_err() {
             model_id.clone()
         );
 
-        let mut delegate_balance = Network::convert_to_balance(
+        let delegate_balance = Network::convert_to_balance(
             delegate_shares,
             total_model_delegated_stake_shares,
             total_model_delegated_stake_balance

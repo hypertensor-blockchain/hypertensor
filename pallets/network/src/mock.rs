@@ -17,11 +17,10 @@ use super::*;
 use crate as pallet_network;
 use frame_support::{ parameter_types, traits::Everything };
 use frame_system as system;
-use sp_core::{ ConstU128, ConstU32, ConstU64, H256, U256 };
+use sp_core::{ ConstU128, ConstU32, ConstU64, H256 };
 use sp_runtime::BuildStorage;
-use frame_support::sp_tracing;
 use sp_runtime::{
-    traits::{ BlakeTwo256, IdentifyAccount, Verify, IdentityLookup, AccountIdLookup },
+    traits::{ BlakeTwo256, IdentifyAccount, Verify, AccountIdLookup },
     MultiSignature,
 };
 

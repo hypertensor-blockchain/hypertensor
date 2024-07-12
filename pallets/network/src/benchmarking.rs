@@ -181,8 +181,10 @@ pub fn get_current_block_as_u64<T: frame_system::Config>() -> u64 {
 
 benchmarks! {
 	add_model {
+		// Query the current number of models
 		let total_models = Network::<T>::total_models();
 
+		// Set up the benchmark
 		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
 		let caller = funded_account::<T>("caller", 0);
 		whitelist_account!(caller);
@@ -198,36 +200,37 @@ benchmarks! {
 	}
 
 	add_model_peer {
-		// add model
-		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
-		let caller = funded_account::<T>("caller", 0);
-		whitelist_account!(caller);
-		Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
-		let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+        // Query the current number of models
+        let total_models = Network::<T>::total_models();
 
+        // Add a model to the network
+        let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
+        let caller = funded_account::<T>("caller", 0);
+        whitelist_account!(caller);
+        Network::<T>::vote_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
+        let _ = Network::<T>::add_model(RawOrigin::Signed(caller.clone()).into(), model_path.clone());
 		make_model_initialized::<T>();
 
-		let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
+        // Increase blocks past consensus steps
+        let block = frame_system::Pallet::<T>::block_number();
+        frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+		
+        // Query the model ID
+        let model_id = ModelPaths::<T>::get(model_path.clone()).unwrap();
 
-		// increase blocks past consensus steps
-		let block = frame_system::Pallet::<T>::block_number();
-		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+        // Set up the benchmark
+        let stake_amount: u128 = get_min_stake_balance::<T>();
+        let peer_account = funded_account::<T>("peer", 0);
+        whitelist_account!(peer_account);
 
-		// add model peer params
-		let stake_amount: u128 = get_min_stake_balance::<T>();
-		let peer_account = funded_account::<T>("peer", 0);
-		whitelist_account!(peer_account);
-
-		// params
-		let total_models = Network::<T>::total_models();
-
-		// increase blocks past consensus steps
-		let block = frame_system::Pallet::<T>::block_number();
-		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
-	}: add_model_peer(RawOrigin::Signed(peer_account), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount)
-	verify {
-		assert_eq!(Network::<T>::total_model_peers(total_models), 1, "TotalModelPeers incorrect.");
-	}
+        // Increase blocks past consensus steps
+        let block = frame_system::Pallet::<T>::block_number();
+        frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
+    }: add_model_peer(RawOrigin::Signed(peer_account), model_id.clone(), peer(0), "172.20.54.234".into(), 8888, stake_amount)
+    verify {
+		// Verify the result
+        assert_eq!(Network::<T>::total_model_peers(model_id), 1, "TotalModelPeers incorrect.");
+    }
 
 	update_model_peer {
 		// add model
