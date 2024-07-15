@@ -67,9 +67,15 @@ pub type Balance = u128;
 pub type BlockNumber = u64;
 
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
+
+// Time is measured by number of blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
+
+pub const YEAR: BlockNumber = DAYS * 365;
+
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
 
 pub const EXISTENTIAL_DEPOSIT: u128 = 500;
 
@@ -123,6 +129,8 @@ impl pallet_network::Config for Test {
   type Currency = Balances;
   type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = ConstU64<0>;
+  type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
 }
 
 parameter_types! {

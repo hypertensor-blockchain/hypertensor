@@ -53,6 +53,8 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const YEAR: BlockNumber = DAYS * 365;
 
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
+
 pub type BalanceCall = pallet_balances::Call<Test>;
 
 parameter_types! {
@@ -128,6 +130,8 @@ impl pallet_network::Config for Test {
   type Currency = Balances;
   type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = ConstU64<0>;
+  type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
 }
 
 parameter_types! {

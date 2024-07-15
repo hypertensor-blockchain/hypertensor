@@ -44,6 +44,8 @@ frame_support::construct_runtime!(
 
 pub type BalanceCall = pallet_balances::Call<Test>;
 
+pub const MILLISECS_PER_BLOCK: u64 = 6000;
+
 parameter_types! {
   pub const BlockHashCount: u64 = 250;
   pub const SS58Prefix: u8 = 42;
@@ -64,6 +66,19 @@ pub type Balance = u128;
 // An index to a block.
 #[allow(dead_code)]
 pub type BlockNumber = u64;
+
+// NOTE: Currently it is not possible to change the slot duration after the chain has started.
+//       Attempting to do so will brick block production.
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
+// Time is measured by number of blocks.
+pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+pub const HOURS: BlockNumber = MINUTES * 60;
+pub const DAYS: BlockNumber = HOURS * 24;
+
+pub const YEAR: BlockNumber = DAYS * 365;
+
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
 
 pub const EXISTENTIAL_DEPOSIT: u128 = 500;
 
@@ -117,6 +132,8 @@ impl Config for Test {
   type Currency = Balances;
   type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = ConstU64<0>;
+  type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
 }
 
 // pub fn new_test_ext() -> sp_io::TestExternalities {

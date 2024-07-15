@@ -49,6 +49,7 @@ mod staking;
 mod delegate_staking;
 mod emission;
 mod info;
+mod inflation_curve;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -75,6 +76,13 @@ pub mod pallet {
 
     #[pallet::constant] // Initial transaction rate limit.
     type InitialTxRateLimit: Get<u64>;
+
+		#[pallet::constant]
+    type SecsPerBlock: Get<u64>;
+
+		#[pallet::constant]
+    type Year: Get<u64>;
+
 	}
 
 	/// Events for the pallet.
@@ -455,7 +463,7 @@ pub mod pallet {
 	// Testnet 30 mins per epoch
 	#[pallet::type_value]
 	pub fn DefaultConsensusBlocksInterval<T: Config>() -> u64 {
-		50
+		100
 	}
 	#[pallet::type_value]
 	pub fn DefaultModelPeersInitializationEpochs<T: Config>() -> u64 {
@@ -492,12 +500,24 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultInflationUpperBound<T: Config>() -> u128 {
-		5800
+		10000
 	}
 	#[pallet::type_value]
 	pub fn DefaultInflationLowerBound<T: Config>() -> u128 {
-		4200
+		8000
 	}
+	#[pallet::type_value]
+	pub fn DefaultTimeDecay<T: Config>() -> u64 {
+		10000
+	}
+	#[pallet::type_value]
+	pub fn DefaultLastModelInitializationBlock<T: Config>() -> u64 {
+		0
+	}
+
+	
+
+
 	#[pallet::type_value]
 	pub fn DefaultMaxModels<T: Config>() -> u32 {
 		32
@@ -788,6 +808,11 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type InflationLowerBound<T> = StorageValue<_, u128, ValueQuery, DefaultInflationLowerBound<T>>;
 
+	#[pallet::storage]
+	pub type TimeDecay<T> = StorageValue<_, u64, ValueQuery, DefaultTimeDecay<T>>;
+
+	#[pallet::storage]
+	pub type LastModelInitializationBlock<T> = StorageValue<_, u64, ValueQuery, DefaultLastModelInitializationBlock<T>>;
 	
 	// Delegate staking logic 
 
@@ -2924,7 +2949,7 @@ pub mod pallet {
 			// then model can be removed
 			let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone());
 			let min_model_peers: u32 = MinModelPeers::<T>::get();
-			let has_min_peers: bool = true;
+			let mut has_min_peers: bool = true;
 			if total_model_peers < min_model_peers {
 				let block: u64 = Self::get_current_block_as_u64();
 				let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
@@ -3045,14 +3070,14 @@ pub mod pallet {
 				initialized: 0,
 			};
 
-			// Activate model
-			ModelActivated::<T>::insert(self.model_path.clone(), true);
-			// Store unique path
-			ModelPaths::<T>::insert(self.model_path.clone(), model_id.clone());
-			// Store model data
-			ModelsData::<T>::insert(model_id.clone(), model_data.clone());
-			// Increase total models count
-			TotalModels::<T>::mutate(|n: &mut u32| *n += 1);
+			// // Activate model
+			// ModelActivated::<T>::insert(self.model_path.clone(), true);
+			// // Store unique path
+			// ModelPaths::<T>::insert(self.model_path.clone(), model_id.clone());
+			// // Store model data
+			// ModelsData::<T>::insert(model_id.clone(), model_data.clone());
+			// // Increase total models count
+			// TotalModels::<T>::mutate(|n: &mut u32| *n += 1);
 
 			// StakeVaultBalance::<T>::mutate(|n: &mut u128| *n += 10000000000000000000);
 			// let mut count = 0;

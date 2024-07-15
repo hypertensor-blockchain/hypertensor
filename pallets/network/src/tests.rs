@@ -39,9 +39,9 @@ use crate::{
   MaxModelConsensusUnconfirmedConsecutiveEpochs, ModelConsensusUnconfirmedConsecutiveEpochsCount,
   DishonestyVotingPeriod, ModelPeerDishonestyVote, MinRequiredPeerConsensusDishonestyEpochs,
   AccountModelDelegateStakeShares,TotalModelDelegateStakeShares, TotalModelDelegateStakeBalance,
-  MinRequiredDelegateUnstakeEpochs
+  MinRequiredDelegateUnstakeEpochs, TotalModels
 };
-
+use frame_support::weights::Pays;
 
 type AccountIdOf<Test> = <Test as frame_system::Config>::AccountId;
 // type PeerIdOf<Test> = PeerId;
@@ -4902,5 +4902,20 @@ fn test_remove_to_delegate_stake_epochs_not_met_err() {
       ),
       Error::<Test>::RequiredDelegateUnstakeEpochsNotMet
     );
+  });
+}
+
+#[test]
+fn test_apr() {
+  new_test_ext().execute_with(|| {
+    let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
+    TotalModels::<Test>::set(1);
+
+    let total_staked_balance: u128 = 12000000000000000000000;
+
+    let emissions = Network::get_epoch_emissions(consensus_blocks_interval, total_staked_balance);
+    log::error!("emissions error {:?}", emissions);
+    log::info!("emissions info   {:?}", emissions);
+    log::debug!("emissions debug {:?}", emissions);
   });
 }

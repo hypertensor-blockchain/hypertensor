@@ -1,12 +1,11 @@
+#![feature(isqrt)]
+
 use super::*;
-use crate::{
-  MILLISECS_PER_BLOCK,
-  DAYS,
-  YEAR
-};
 use frame_support::dispatch::Vec;
 
 impl<T: Config> Pallet<T> {
+  // pub const SECONDS_PER_YEAR: u64 = 31556926;
+
   pub fn get_opt_models() -> u32 {
     OptimalModels::<T>::get()
   }
@@ -39,54 +38,99 @@ impl<T: Config> Pallet<T> {
     9
   }
 
-  pub fn get_apr() -> u128 {
-
-  }
-
   pub fn get_lower_bound(usage: u128) -> u128 {
     let total_models = TotalModels::<T>::get();
-    let main_lower_bound = InflationLowerBound::<T>::get();
-    let epoch_lower_bound = Self::percent_mul(main_lower_bound, usage);
+    let inflation_lower_bound = InflationLowerBound::<T>::get();
+    let epoch_lower_bound = Self::percent_mul(inflation_lower_bound, usage);
     epoch_lower_bound
   }
 
   pub fn get_upper_bound(usage: u128) -> u128 {
     let total_models = TotalModels::<T>::get();
-    let main_upper_bound = InflationUpperBound::<T>::get();
-    let epoch_upper_bound = Self::PERCENTAGE_FACTOR - (Self::PERCENTAGE_FACTOR - main_upper_bound) * usage;
+    let inflation_upper_bound = InflationUpperBound::<T>::get();
+    let epoch_upper_bound = Self::PERCENTAGE_FACTOR - (Self::PERCENTAGE_FACTOR - inflation_upper_bound) * usage;
     epoch_upper_bound
   }
 
+  // pub fn get_decay(total_models: u32, block: u64, interval: u64) -> u128 {
+  //   let max_models = MaxModels::<T>::get();
+  //   let total_models = TotalModels::<T>::get();
+  //   let inflation_upper_bound = InflationUpperBound::<T>::get();
+  //   let inflation_lower_bound = InflationLowerBound::<T>::get();
+
+  //   // --- Get usage
+  //   let usage = Self::percent_div(total_models as u128, max_models as u128);
+  //   // --- Get delta
+  //   let bound_delta = epoch_upper_bound - epoch_lower_bound;
+
+  //   // --- Get time decay
+  //   let time_decay = TimeDecay::<T>::get();
+
+  //   // --- Get last block model initialized
+  //   let last_block_model_initialized = LastModelInitializationBlock::<T>::get();
+
+  //   // --- Get end of time period
+  //   let end_of_time_decay = last_block_model_initialized + time_decay;
+
+  //   let mut time_elapsed_as_percentage = Self::PERCENTAGE_FACTOR;
+
+  //   // --- Block should always be greater than the last_block_model_initialized
+
+  //   // --- Get percentage of time elapsed since the last model was initialized in 
+  //   //     relation to the time decay between models initialization
+  //   if block < end_of_time_decay {
+  //     let time_elasped = block - last_block_model_initialized;
+  //     time_elapsed_as_percentage = Self::percent_div(time_elasped, time_decay)
+  //   }
+
+  //   $A13*N13*100+L13
+
+  //   time_elapsed_as_percentage * bound_delta + 
+    
+  // }
+
   // Get decay of emissions as a variable
-  pub fn get_decay(total_models: u32, block: u64, interval: u64) -> u128 {
+  // Include total live models, not just models that pass consensus to incentivize nodes to remove dead models
+  pub fn get_decay(block: u64) -> u128 {
     let opt_models = Self::get_opt_models();
     let max_models = MaxModels::<T>::get();
     let total_models = TotalModels::<T>::get();
+    log::error!("total_models {:?}", total_models);
+
     let usage = Self::percent_div(total_models as u128, max_models as u128);
+    log::error!("usage {:?}", usage);
 
     // --- Get upper bound
-    let total_models = TotalModels::<T>::get();
-    let main_upper_bound = InflationUpperBound::<T>::get();
-    let epoch_upper_bound = Self::PERCENTAGE_FACTOR - (Self::PERCENTAGE_FACTOR - main_upper_bound) * usage;
+    let inflation_upper_bound = InflationUpperBound::<T>::get();
+    log::error!("inflation_upper_bound {:?}", inflation_upper_bound);
 
-    // -- Get lower bound
-    let total_models = TotalModels::<T>::get();
-    let main_lower_bound = InflationLowerBound::<T>::get();
-    let epoch_lower_bound = Self::percent_mul(main_lower_bound, usage);
+    let epoch_upper_bound = Self::PERCENTAGE_FACTOR - (Self::PERCENTAGE_FACTOR - inflation_upper_bound) * usage;
+    log::error!("epoch_upper_bound {:?}", epoch_upper_bound);
 
-    // -- Get delta
+    // --- Get lower bound
+    let inflation_lower_bound = InflationLowerBound::<T>::get();
+    log::error!("inflation_lower_bound {:?}", inflation_lower_bound);
+
+    let epoch_lower_bound = Self::percent_mul(inflation_lower_bound, usage);
+    log::error!("epoch_lower_bound {:?}", epoch_lower_bound);
+
+    // --- Get delta
     let bound_delta = epoch_upper_bound - epoch_lower_bound;
+    log::error!("bound_delta {:?}", bound_delta);
 
-    // -- Get time decay
+    // --- Get time decay
     let time_decay = TimeDecay::<T>::get();
+    log::error!("time_decay {:?}", time_decay);
 
-    // -- Get last block model initialized
+    // --- Get last block model initialized
     let last_block_model_initialized = LastModelInitializationBlock::<T>::get();
+    log::error!("last_block_model_initialized {:?}", last_block_model_initialized);
 
-    // -- Get end of time period
+    // --- Get end of time period
     let end_of_time_decay = last_block_model_initialized + time_decay;
+    log::error!("end_of_time_decay {:?}", end_of_time_decay);
 
-    let mut time_elapsed_as_percentage = Self::PERCENTAGE_FACTOR;
+    let mut time_elapsed_as_percentage = 0;
 
     // --- Block should always be greater than the last_block_model_initialized
 
@@ -94,21 +138,82 @@ impl<T: Config> Pallet<T> {
     //     relation to the time decay between models initialization
     if block < end_of_time_decay {
       let time_elasped = block - last_block_model_initialized;
-      time_elapsed_as_percentage = Self::percent_div(time_elasped, time_decay)
+      log::error!("time_elasped {:?}", time_elasped);
+      time_elapsed_as_percentage = Self::PERCENTAGE_FACTOR - Self::percent_div(time_elasped as u128, time_decay as u128);
+    }
+    log::error!("time_elapsed_as_percentage {:?}", time_elapsed_as_percentage);
+
+    // time_elapsed_as_percentage * bound_delta + epoch_lower_bound
+    Self::percent_mul(time_elapsed_as_percentage, bound_delta) + epoch_lower_bound
+  }
+
+  pub fn get_epoch_emissions(block: u64, total_balance: u128) -> u128 {
+    log::error!("block {:?}", block);
+    log::error!("total_balance {:?}", total_balance);
+    // --- Get APR
+    let apr: f64 = Self::get_apr(block, total_balance);
+    log::error!("apr {:?}", apr);
+
+    // let apr_u128 = Self::percent_mul(apr as u128, Self::PERCENTAGE_FACTOR);
+    // log::error!("apr_u128 {:?}", apr_u128);
+
+    log::error!("apr * total_balance {:?}", apr * total_balance as f64);
+    log::error!("apr * total_balance {:?}", (apr * total_balance as f64) as u128);
+
+    // let emissions = Self::gwei_into_eth((apr * total_balance as f64) as u128);
+    // log::error!("emissions {:?}", emissions);
+
+    // emissions
+    (apr * total_balance as f64) as u128
+
+    // Self::gwei_into_eth((apr as u128 * total_balance) as u128)
+  }
+
+  // TODO: Make updateable as storage element
+  const BASE_REWARD_FACTOR: f64 = 1280000.0;
+
+  pub fn get_apr(block: u64, total_balance: u128) -> f64 {
+    if total_balance == 0 || block == 0 {
+      return 0.0;
     }
 
-    time_elapsed_as_percentage * bound_delta / Self::PERCENTAGE_FACTOR + epoch_lower_bound
-  }
+    // --- Get seconds per year
+    let seconds_per_year: f64 = (T::SecsPerBlock::get() * T::Year::get()) as f64;
+    log::error!("seconds_per_year {:?}", seconds_per_year);
 
-  pub fn get_epochs_emissions(peers_count: u32, total_stake_balance: u128) -> u128 {
-    // --- Get APR
-    let apr = Self::get_apr();
-
-    // --- Calculate APR as an epoch to get total emissions
-    let milliseconds_per_block: u64 = MILLISECS_PER_BLOCK;
+    // --- Get blocks per epoch
     let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
-    let x = consensus_blocks_interval / YEAR;
-    9
-  }
+    log::error!("consensus_blocks_interval {:?}", consensus_blocks_interval);
 
+    if block < consensus_blocks_interval {
+      return 0.0;
+    }
+
+    // --- Get seconds per epoch
+    let seconds_per_epoch: f64 = (T::SecsPerBlock::get() * consensus_blocks_interval) as f64;
+    log::error!("seconds_per_epoch {:?}", seconds_per_epoch);
+
+    // --- Get epochs per year
+    let epochs_per_year: f64 = seconds_per_year / seconds_per_epoch;
+    log::error!("epochs_per_year {:?}", epochs_per_year);
+
+    // --- Get decay
+    let decay: f64 = Self::get_decay(block) as f64;
+    log::error!("decay {:?}", decay);
+
+    // --- Calculate APR
+    let apr = libm::exp(
+      seconds_per_year as f64 / seconds_per_epoch as f64 * 
+      Self::BASE_REWARD_FACTOR / 31622.0 / 
+      libm::pow(Self::eth_into_gwei(total_balance) as f64, 0.5)
+    ) - 1.0;
+    log::error!("apr {:?}", apr);
+
+    // --- Adjust for decay
+    let epoch_apr: f64 = apr * 100.0 / epochs_per_year;
+    log::error!("epoch_apr {:?}", epoch_apr);
+
+    // --- Return final APR value
+    epoch_apr
+  }
 }

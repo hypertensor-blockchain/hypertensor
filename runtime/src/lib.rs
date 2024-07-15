@@ -149,6 +149,8 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const YEAR: BlockNumber = DAYS * 365;
 
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
+
 // Est. halving per x years
 // pub const BLOCKS_PER_HALVING: BlockNumber = YEAR * 4 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const BLOCKS_PER_HALVING: BlockNumber = YEAR * 1;
@@ -592,6 +594,8 @@ impl pallet_network::Config for Runtime {
 	type Currency = Balances;
 	type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = InitialTxRateLimit;
+	type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
 }
 
 parameter_types! {
