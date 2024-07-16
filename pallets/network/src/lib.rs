@@ -511,7 +511,7 @@ pub mod pallet {
 		10000
 	}
 	#[pallet::type_value]
-	pub fn DefaultLastModelInitializationBlock<T: Config>() -> u64 {
+	pub fn DefaultLastModelInitializedBlock<T: Config>() -> u64 {
 		0
 	}
 
@@ -812,7 +812,7 @@ pub mod pallet {
 	pub type TimeDecay<T> = StorageValue<_, u64, ValueQuery, DefaultTimeDecay<T>>;
 
 	#[pallet::storage]
-	pub type LastModelInitializationBlock<T> = StorageValue<_, u64, ValueQuery, DefaultLastModelInitializationBlock<T>>;
+	pub type LastModelInitializedBlock<T> = StorageValue<_, u64, ValueQuery, DefaultLastModelInitializedBlock<T>>;
 	
 	// Delegate staking logic 
 
@@ -1816,6 +1816,8 @@ pub mod pallet {
 			// Increase total models. This is used for unique Model IDs
 			TotalModels::<T>::mutate(|n: &mut u32| *n += 1);
 
+			LastModelInitializedBlock::<T>::set(block);
+
 			Self::deposit_event(Event::ModelAdded { 
 				account: account_id, 
 				model_id: model_id.clone(), 
@@ -1947,7 +1949,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Add a model peer that is currently hosting an AI model
+		/// Add a model peer that is currently hosting an AI model (or a peer in DHT)
 		/// A minimum stake balance is required
 		// Before adding model peer you must become a peer hosting the model of choice
 		// This fn will claim your peer_id and associate it with your account as peer_id => account_id
@@ -2896,6 +2898,28 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		// Testing purposes only
+		#[pallet::call_index(20)]
+		#[pallet::weight({0})]
+		pub fn do_generate_emissionsf(origin: OriginFor<T>) -> DispatchResult {
+			let block: u64 = Self::get_current_block_as_u64();
+
+			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+	
+			ensure!((block - 1) % consensus_blocks_interval == 0, "Error block generate_emissionsf");
+
+			Self::generate_emissionsf(block);
+
+			let _ = ModelPeerConsensusResults::<T>::clear(u32::MAX, None);
+			let _ = PeerConsensusEpochSubmitted::<T>::clear(u32::MAX, None);
+			let _ = PeerConsensusEpochUnconfirmed::<T>::clear(u32::MAX, None);
+			let _ = ModelTotalConsensusSubmits::<T>::clear(u32::MAX, None);
+			let _ = ModelConsensusEpochUnconfirmedCount::<T>::clear(u32::MAX, None);
+
+			Ok(())
+		}
+		
 	}
 
 	impl<T: Config> Pallet<T> {

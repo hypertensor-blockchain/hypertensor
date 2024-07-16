@@ -2490,6 +2490,96 @@ fn test_generate_emissions_all_math() {
 }
 
 #[test]
+fn test_generate_emissionsf() {
+  new_test_ext().execute_with(|| {
+    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+
+    let n_peers: u32 = Network::max_model_peers();
+
+    build_model(model_path.clone());
+    make_model_submittable();
+
+    let deposit_amount: u128 = 10000000000000000000000;
+    let amount: u128 = 1000000000000000000000; // 1000.00 tokens
+
+    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+
+    System::set_block_number(System::block_number() + CONSENSUS_STEPS);
+
+    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    assert_eq!(Network::total_stake(), amount_staked);
+    post_successful_add_model_peers_asserts(
+      n_peers.into(),
+      amount,
+      model_id.clone(),
+    );
+
+    // initialize peer consensus data array
+    // let model_peer_data_vec = model_peer_data(0, n_peers);
+
+    make_model_peer_consensus_data_submittable();
+
+    // submit peer consensus data per each peer
+    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+
+    // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
+    // the ModelPeerConsensusResults count should always be the count of total model peers
+    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+		let len = submissions.count();
+		assert_eq!(
+			len, 
+			n_peers as usize, 
+			"ModelPeerConsensusResults len mismatch."
+		);
+
+    // Set to correct consensus block
+    let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
+    System::set_block_number(
+      consensus_blocks_interval + (System::block_number() - (System::block_number() % consensus_blocks_interval))
+    );    
+    
+    assert_ok!(
+      Network::form_consensus(RuntimeOrigin::signed(account(0))) 
+    );
+
+    post_successful_form_consensus_ensures(model_id.clone());
+
+    assert_eq!(Network::total_model_peers(1), n_peers as u32);
+
+    // stake data should exist
+    let total_stake: u128 = TotalStake::<Test>::get();
+    assert_ne!(total_stake, 0);
+
+    // Set to correct generate emissions block
+    let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
+    System::set_block_number(
+      consensus_blocks_interval + (System::block_number() - (System::block_number() % consensus_blocks_interval) + 1)
+    );    
+    
+    assert_ok!(
+      Network::do_generate_emissionsf(RuntimeOrigin::signed(account(0))) 
+    );
+
+    post_successful_generate_emissions_ensures();
+
+    // ModelPeerConsensusResults is removed on successful emissions generation
+    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+		let len = submissions.count();
+		assert_eq!(
+			len, 
+			0, 
+			"ModelPeerConsensusResults len mismatch."
+		);
+
+    // ensure balances have increased
+    for n in 0..n_peers {
+      let stake_balance = Network::account_model_stake(account(n), model_id);
+      assert_ne!(amount, stake_balance);
+    }
+  });
+}
+
+#[test]
 fn test_remove_peer_err() {
   new_test_ext().execute_with(|| {
     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
@@ -4908,14 +4998,36 @@ fn test_remove_to_delegate_stake_epochs_not_met_err() {
 #[test]
 fn test_apr() {
   new_test_ext().execute_with(|| {
+    let max_models = Network::max_models();
     let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
-    TotalModels::<Test>::set(1);
+    
 
     let total_staked_balance: u128 = 12000000000000000000000;
 
-    let emissions = Network::get_epoch_emissions(consensus_blocks_interval, total_staked_balance);
-    log::error!("emissions error {:?}", emissions);
-    log::info!("emissions info   {:?}", emissions);
-    log::debug!("emissions debug {:?}", emissions);
+    let mut previous_apr = f64::MAX;
+    for n in 0..max_models {
+      TotalModels::<Test>::set(n+1);
+      let apr = Network::get_apr(consensus_blocks_interval, total_staked_balance*(n as u128 + 1));
+      log::error!("apr          {:?}", apr);
+      log::error!("previous_apr {:?}", apr);
+
+      assert!(previous_apr > apr, "previous_apr > apr");
+      assert_ne!(apr, 0.0, "apr is 0");
+      previous_apr = apr;
+    }
   });
 }
+
+// #[test]
+// fn test_emissions() {
+//   new_test_ext().execute_with(|| {
+//     let max_models = Network::max_models();
+//     let consensus_blocks_interval = ConsensusBlocksInterval::<Test>::get();
+//     let total_staked_balance: u128 = 12000000000000000000000;
+//     let mut previous_emissions = u128::MAX;
+//     for n in 0..max_models {
+//       TotalModels::<Test>::set(n+1);
+//       let emissions = Network::get_epoch_emissions(consensus_blocks_interval, total_staked_balance*(n as u128 + 1));
+//     }
+//   });
+// }

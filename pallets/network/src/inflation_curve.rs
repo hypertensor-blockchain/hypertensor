@@ -67,7 +67,7 @@ impl<T: Config> Pallet<T> {
   //   let time_decay = TimeDecay::<T>::get();
 
   //   // --- Get last block model initialized
-  //   let last_block_model_initialized = LastModelInitializationBlock::<T>::get();
+  //   let last_block_model_initialized = LastModelInitializedBlock::<T>::get();
 
   //   // --- Get end of time period
   //   let end_of_time_decay = last_block_model_initialized + time_decay;
@@ -123,7 +123,7 @@ impl<T: Config> Pallet<T> {
     log::error!("time_decay {:?}", time_decay);
 
     // --- Get last block model initialized
-    let last_block_model_initialized = LastModelInitializationBlock::<T>::get();
+    let last_block_model_initialized = LastModelInitializedBlock::<T>::get();
     log::error!("last_block_model_initialized {:?}", last_block_model_initialized);
 
     // --- Get end of time period
@@ -147,7 +147,7 @@ impl<T: Config> Pallet<T> {
     Self::percent_mul(time_elapsed_as_percentage, bound_delta) + epoch_lower_bound
   }
 
-  pub fn get_epoch_emissions(block: u64, total_balance: u128) -> u128 {
+  pub fn get_epoch_rewards(block: u64, total_balance: u128) -> u128 {
     log::error!("block {:?}", block);
     log::error!("total_balance {:?}", total_balance);
     // --- Get APR

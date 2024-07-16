@@ -133,7 +133,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			// 
 			// Cannot use drain_prefix with mapping so we clear after
 			//
-			let mut total_model_stake_consensus_sum: u128 = 0;
+			let mut total_model_stake_sum: u128 = 0;
 			let mut scores_sum: u128 = 0;
 			let accounts: Vec<(T::AccountId, u128, u128)> = ModelPeerConsensusResults::<T>::iter_prefix_values(model_id.clone())
 				.map(|x| {
@@ -145,7 +145,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 						account_model_stake_balance = max_stake_balance;
 					}
 
-					total_model_stake_consensus_sum.saturating_accrue(account_model_stake_balance);
+					total_model_stake_sum.saturating_accrue(account_model_stake_balance);
 					scores_sum.saturating_accrue(x.score);
 
 					(x.account_id, account_model_stake_balance, x.score)
@@ -163,17 +163,17 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			// to-do: check if all cleared
 			let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
 
-			// *** 14. Max rewards to distribute to model peers
-			let max_model_emissions: u128 = Self::percent_mul(total_vault_balance, model_weight);
+			// *** 14. Rewards to distribute to model peers
+			let model_emissions: u128 = Self::percent_mul(total_vault_balance, model_weight);
 
 			// *** 15. Return if model weight is zero 
-			if max_model_emissions == 0 {
+			if model_emissions == 0 {
 				continue
 			}
 
 			// *** 16. Return if either are zero 
 			// Both variables are required to generate emissions
-			if total_model_stake_consensus_sum == 0 || scores_sum == 0 {
+			if total_model_stake_sum == 0 || scores_sum == 0 {
 				continue
 			}
 			
@@ -190,7 +190,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 				// This is checked later in `account_avg_weight`
 				let account_stake_percentage: u128 = Self::percent_div(
 					*stake_balance, 
-					total_model_stake_consensus_sum
+					total_model_stake_sum
 				);
 
 				// *** 20. Percent of score peer has in scores sum
@@ -211,7 +211,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 				}
 	
 				// *** 22. Get accounts total emissions on this model
-				let account_total_emissions: u128 = Self::percent_mul(max_model_emissions, account_avg_weight);
+				let account_total_emissions: u128 = Self::percent_mul(model_emissions, account_avg_weight);
 				
 				// Redundant
 				if account_total_emissions == 0 {
@@ -238,6 +238,102 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		StakeVaultBalance::<T>::set(total_vault_balance.saturating_sub(total_emissions_on_epoch));
 		log::info!("Generated emissions for a total of {:?}", total_emissions_on_epoch);
   }
+
+	pub fn generate_emissionsf(block: u64) {
+		let mut total_stake: u128 = 0;
+
+		// *** 1. Get all models in-consensus and remove it afterwards using `take()`
+		let model_ids: Vec<u32> = ModelsInConsensus::<T>::take();
+
+		// If there are no models in-consensus, return
+		if model_ids.len() == 0 {
+			return
+		}
+
+		let max_stake_balance: u128 = MaxStakeBalance::<T>::get();
+		let stake_reward_weight: u128 = StakeRewardWeight::<T>::get();
+		let score_reward_weight = Self::PERCENTAGE_FACTOR.saturating_sub(stake_reward_weight);
+
+		for model_id in model_ids.iter() {
+			let mut total_model_stake_sum: u128 = 0;
+			let mut scores_sum: u128 = 0;
+			let accounts: Vec<(T::AccountId, u128, u128)> = ModelPeerConsensusResults::<T>::iter_prefix_values(model_id.clone())
+				.map(|x| {
+					let mut account_model_stake_balance: u128 = match AccountModelStake::<T>::try_get(&x.account_id, model_id.clone()) {
+						Ok(balance) => balance,
+						Err(()) => 0,
+					};
+					if account_model_stake_balance > max_stake_balance {
+						account_model_stake_balance = max_stake_balance;
+					}
+
+					total_model_stake_sum.saturating_accrue(account_model_stake_balance);
+					scores_sum.saturating_accrue(x.score);
+
+					(x.account_id, account_model_stake_balance, x.score)
+				})
+				.collect();
+
+			if accounts.len() == 0 {
+				// We don't clear_prefix here because it is already at zero
+				continue
+			}
+			
+			// *** Reset storage for next epoch
+			let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
+
+			// *** Rewards to distribute to model peers based on stake to the specific model
+			let epoch_rewards: u128 = Self::get_epoch_rewards(block, total_model_stake_sum);
+
+			// *** 17. Iter each account in-consensus
+			for (account_id, stake_balance, score) in accounts.iter() {
+				// *** 18. If balance is zero, continue
+				// Redundant
+				if *stake_balance == 0 {
+					continue
+				}
+
+				let account_stake_percentage: u128 = Self::percent_div(
+					*stake_balance, 
+					total_model_stake_sum
+				);
+
+				let account_score_percentage: u128 = Self::percent_div(*score, scores_sum);
+
+				// *** 21. Calculate weights together
+				// This increases the odds of receiving rewards vs. doing them separately if the sum or weight is low
+				let account_avg_weight_1: u128 = Self::percent_mul(stake_reward_weight, account_stake_percentage);
+				let account_avg_weight_2: u128 = Self::percent_mul(score_reward_weight, account_score_percentage);
+				let account_avg_weight: u128 = account_avg_weight_1 + account_avg_weight_2;
+
+				// *** 22. Continue if weight zero
+				// This previous calculations will round to 0 if weight is under 0.01%
+				if account_avg_weight == 0 {
+					continue
+				}
+	
+				// *** 22. Get accounts total emissions on this model
+				let account_total_emissions: u128 = Self::percent_mul(epoch_rewards, account_avg_weight);
+				
+				// Redundant
+				if account_total_emissions == 0 {
+					continue
+				}
+
+				// *** 23. Increase accounts staking balances
+				// Increase account model stake
+				// Increase account total stake
+				// Increase model stake
+				// Increase total stake
+				// note: there is no rate limiter on this function
+				Self::increase_account_stake(
+					&account_id,
+					model_id.clone(), 
+					account_total_emissions,
+				);
+			}
+		}
+	}
 
 	// Excess Weight Distribution
 	//
