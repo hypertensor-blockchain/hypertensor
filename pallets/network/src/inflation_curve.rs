@@ -1,4 +1,4 @@
-#![feature(isqrt)]
+// #![feature(isqrt)]
 
 use super::*;
 use frame_support::dispatch::Vec;
@@ -52,7 +52,7 @@ impl<T: Config> Pallet<T> {
     epoch_upper_bound
   }
 
-  // pub fn get_decay(total_models: u32, block: u64, interval: u64) -> u128 {
+  // pub fn get_decay(total_models: u32, block: u64, epoch_length: u64) -> u128 {
   //   let max_models = MaxModels::<T>::get();
   //   let total_models = TotalModels::<T>::get();
   //   let inflation_upper_bound = InflationUpperBound::<T>::get();
@@ -91,7 +91,7 @@ impl<T: Config> Pallet<T> {
 
   // Get decay of emissions as a variable
   // Include total live models, not just models that pass consensus to incentivize nodes to remove dead models
-  pub fn get_decay(block: u64) -> u128 {
+  pub fn get_decay(block: u64) -> f64 {
     let opt_models = Self::get_opt_models();
     let max_models = MaxModels::<T>::get();
     let total_models = TotalModels::<T>::get();
@@ -144,7 +144,8 @@ impl<T: Config> Pallet<T> {
     log::error!("time_elapsed_as_percentage {:?}", time_elapsed_as_percentage);
 
     // time_elapsed_as_percentage * bound_delta + epoch_lower_bound
-    Self::percent_mul(time_elapsed_as_percentage, bound_delta) + epoch_lower_bound
+    // Self::percent_mul(time_elapsed_as_percentage, bound_delta) + epoch_lower_bound
+    (Self::percent_mul(time_elapsed_as_percentage, bound_delta) + epoch_lower_bound) as f64 / Self::PERCENTAGE_FACTOR as f64
   }
 
   pub fn get_epoch_rewards(block: u64, total_balance: u128) -> u128 {
@@ -170,7 +171,8 @@ impl<T: Config> Pallet<T> {
   }
 
   // TODO: Make updateable as storage element
-  const BASE_REWARD_FACTOR: f64 = 1280000.0;
+  // const BASE_REWARD_FACTOR: f64 = 1280000.0;
+  const BASE_REWARD_FACTOR: f64 = 48.0;
 
   pub fn get_apr(block: u64, total_balance: u128) -> f64 {
     if total_balance == 0 || block == 0 {
@@ -182,15 +184,15 @@ impl<T: Config> Pallet<T> {
     log::error!("seconds_per_year {:?}", seconds_per_year);
 
     // --- Get blocks per epoch
-    let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
-    log::error!("consensus_blocks_interval {:?}", consensus_blocks_interval);
+    let epoch_length: u64 = EpochLength::<T>::get();
+    log::error!("epoch_length {:?}", epoch_length);
 
-    if block < consensus_blocks_interval {
+    if block < epoch_length {
       return 0.0;
     }
 
     // --- Get seconds per epoch
-    let seconds_per_epoch: f64 = (T::SecsPerBlock::get() * consensus_blocks_interval) as f64;
+    let seconds_per_epoch: f64 = (T::SecsPerBlock::get() * epoch_length) as f64;
     log::error!("seconds_per_epoch {:?}", seconds_per_epoch);
 
     // --- Get epochs per year
@@ -201,16 +203,31 @@ impl<T: Config> Pallet<T> {
     let decay: f64 = Self::get_decay(block) as f64;
     log::error!("decay {:?}", decay);
 
+    let max_peer = MaxModelPeers::<T>::get();
+    let min_stake = MinStakeBalance::<T>::get();
+    let max_stake: f64 = max_peer as f64 * min_stake as f64;
+    let stake_usage: f64 = total_balance as f64 / max_stake;
+    let amount_staked_as_gwei_as_f64: f64 = Self::eth_into_gwei(total_balance) as f64;
+    log::error!("stake_usage {:?}", stake_usage);
+
     // --- Calculate APR
-    let apr = libm::exp(
-      seconds_per_year as f64 / seconds_per_epoch as f64 * 
-      Self::BASE_REWARD_FACTOR / 31622.0 / 
-      libm::pow(Self::eth_into_gwei(total_balance) as f64, 0.5)
+    let apr: f64 = libm::exp(
+      Self::BASE_REWARD_FACTOR * 31622.0 / 
+      libm::pow(amount_staked_as_gwei_as_f64 + amount_staked_as_gwei_as_f64 * stake_usage, 0.5)
     ) - 1.0;
+
+    // let apr = libm::exp(
+    //   seconds_per_year as f64 / seconds_per_epoch as f64 * 
+    //   Self::BASE_REWARD_FACTOR / 31622.0 / 
+    //   libm::pow(Self::eth_into_gwei(total_balance) as f64, 0.5)
+    // ) - 1.0;
     log::error!("apr {:?}", apr);
 
     // --- Adjust for decay
-    let epoch_apr: f64 = apr * 100.0 / epochs_per_year;
+    let decayed_apr: f64 = apr * decay;
+
+    // --- Adjust for epochs
+    let epoch_apr: f64 = decayed_apr * 100.0 / epochs_per_year;
     log::error!("epoch_apr {:?}", epoch_apr);
 
     // --- Return final APR value

@@ -252,19 +252,19 @@ impl<T: Config> Pallet<T> {
   // }
 
   // get eligible blocks for consensus submissions and inclusion on models and peers
-  pub fn get_eligible_epoch_block(epochs_interval: u64, initialized: u64, epochs: u64) -> u64 {
-    let eligible_block: u64 = initialized - (initialized % epochs_interval) + epochs_interval * epochs;
+  pub fn get_eligible_epoch_block(epoch_length: u64, initialized: u64, epochs: u64) -> u64 {
+    let eligible_block: u64 = initialized - (initialized % epoch_length) + epoch_length * epochs;
     eligible_block
   }
 
   pub fn get_model_initialization_cost(block: u64) -> u128 {
     let mut model_peers_included_count: u128 = 0;
-    let interval: u64 = ConsensusBlocksInterval::<T>::get();
+    let epoch_length: u64 = EpochLength::<T>::get();
     let min_required_consensus_inclusion_epochs = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
 
     for model_peer in ModelPeersData::<T>::iter_values() {
       let is_included: bool = block >= Self::get_eligible_epoch_block(
-        interval, 
+        epoch_length, 
         model_peer.initialized, 
         min_required_consensus_inclusion_epochs
       );
@@ -280,9 +280,9 @@ impl<T: Config> Pallet<T> {
 
   // Returns true if consensus block steps are being performed
   // Such as 1. forming consensus 2. generating emissions
-  // Current block must be greater than the interval
-  pub fn is_in_consensus_steps(block: u64, interval: u64) -> bool {
-    block % interval == 0 || (block - 1) % interval == 0
+  // Current block must be greater than the epoch_length
+  pub fn is_in_consensus_steps(block: u64, epoch_length: u64) -> bool {
+    block % epoch_length == 0 || (block - 1) % epoch_length == 0
   }
  
   // If can submit consensus
@@ -293,9 +293,9 @@ impl<T: Config> Pallet<T> {
   //
   // e.g. If a model peer is removed in the middle of consensus submissions, model peers can
   //      manipulate the storage to have other peers forced out of consensus
-  pub fn can_submit_consensus(block: u64, interval: u64) -> bool {
-    let in_consensus_steps: bool = Self::is_in_consensus_steps(block, interval);
-    let can_remove_or_update_model_peer: bool = Self::can_remove_or_update_model_peer(block, interval);
+  pub fn can_submit_consensus(block: u64, epoch_length: u64) -> bool {
+    let in_consensus_steps: bool = Self::is_in_consensus_steps(block, epoch_length);
+    let can_remove_or_update_model_peer: bool = Self::can_remove_or_update_model_peer(block, epoch_length);
     !in_consensus_steps && !can_remove_or_update_model_peer
   }
   
@@ -307,12 +307,12 @@ impl<T: Config> Pallet<T> {
   // the previous epochs eligibility
   pub fn is_epoch_block_eligible(
     block: u64, 
-    interval: u64, 
+    epoch_length: u64, 
     epochs: u64, 
     initialized: u64
   ) -> bool {
     block >= Self::get_eligible_epoch_block(
-      interval, 
+      epoch_length, 
       initialized, 
       epochs
     )
@@ -322,7 +322,7 @@ impl<T: Config> Pallet<T> {
   pub fn can_model_accept_consensus_submissions(
     model_id: u32,
     block: u64, 
-    interval: u64
+    epoch_length: u64
   ) -> bool {
     true
   }
@@ -334,15 +334,15 @@ impl<T: Config> Pallet<T> {
   // of the epochs blocks span
   //
   // This is to avoid any storage changes that can impact consensus or emissions
-  pub fn can_remove_or_update_model_peer(block: u64, interval: u64) -> bool {
-    let in_consensus_steps: bool = Self::is_in_consensus_steps(block, interval);
+  pub fn can_remove_or_update_model_peer(block: u64, epoch_length: u64) -> bool {
+    let in_consensus_steps: bool = Self::is_in_consensus_steps(block, epoch_length);
 
     // Get percentage of beginning of epoch can remove peer
     let remove_peer_block_percentage_of_epoch = RemoveModelPeerEpochPercentage::<T>::get();
 
     // Get blocks span following consensus steps model peers can exit
     let block_span_can_remove_peer = Self::percent_mul(
-      interval as u128,
+      epoch_length as u128,
       remove_peer_block_percentage_of_epoch
     );
 
@@ -351,7 +351,7 @@ impl<T: Config> Pallet<T> {
     //
     // e.g. • If we are on block 10000
     //      • The consensus steps are 2 blocks (forming consensus + generating emissions)
-    //      • If the interval is 100 blocks per epoch
+    //      • If the epoch_length is 100 blocks per epoch
     //      • If the percentage is 10.0% of the epoch resulting in 8 blocks (10 blocks - 2 steps)
     //          • 10000-10001 will be the consensus steps
     //          • 10002-10010 will be the model removal span
@@ -361,9 +361,9 @@ impl<T: Config> Pallet<T> {
     //          • Thus model peers can submit consensus between 10011 - 10100
 
     // start the block after consensus steps
-    let start_block = Self::CONSENSUS_STEPS + (block - (block % interval));
+    let start_block = Self::CONSENSUS_STEPS + (block - (block % epoch_length));
     // end the block up to percentage of epoch blocks
-    let end_block = block_span_can_remove_peer as u64 + (block - (block % interval));
+    let end_block = block_span_can_remove_peer as u64 + (block - (block % epoch_length));
 
     // Start block must be greater than or equal to current block
     // End block must be less than or equal to current block
@@ -419,9 +419,13 @@ impl<T: Config> Pallet<T> {
     // Remove model_id from AccountModels
     let mut account_model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
     account_model_ids.retain(|&x| x != model_id);
-
     // Insert retained model_id's
     AccountModels::<T>::insert(account_id.clone(), account_model_ids);
+
+    // Remove if accountant
+    // let mut accountants: Vec<T::AccountId> = Accountants::<T>::get(model_id.clone());
+    // accountants.retain(|&x| x != account_id.clone());
+    // Accountants::<T>::insert(model_id.clone().clone(), accountants);
 
     log::info!("Removed model peer AccountId {:?} from model ID {:?}", account_id.clone(), model_id.clone());
 
@@ -440,61 +444,102 @@ impl<T: Config> Pallet<T> {
     0
   }
 
-  pub fn get_total_submittable_model_peers(
+  // model_id: UID of model
+  // block: current block
+  // epoch_length: the number of blocks per epoch
+  // epochs: required number of epochs
+  pub fn get_total_eligible_model_peers_count(
     model_id: u32,
     block: u64,
-    consensus_blocks_interval: u64,
-    min_required_peer_consensus_submit_epochs: u64
+    epoch_length: u64,
+    epochs: u64
   ) -> u32 {
     // Count of eligible to submit consensus data model peers
-    let mut total_submit_eligible_model_peers = 0;
+    let mut total_eligible_model_peers = 0;
     
-    // increment total_submit_eligible_model_peers with model peers that are eligible to submit consensus data
+    // increment total_eligible_model_peers with model peers that are eligible to submit consensus data
     for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
       let initialized: u64 = model_peer.initialized;
       if Self::is_epoch_block_eligible(
         block, 
-        consensus_blocks_interval, 
-        min_required_peer_consensus_submit_epochs, 
+        epoch_length, 
+        epochs, 
         initialized
       ) {
-        total_submit_eligible_model_peers += 1;
+        total_eligible_model_peers += 1;
       }
     }
 
-    total_submit_eligible_model_peers
+    total_eligible_model_peers
   }
 
   // Gets the count of all eligible to submit model peers on the previous epoch to account for the current block steps
-  pub fn get_prev_epoch_total_submittable_model_peers(
+  // model_id: UID of model
+  // block: current block
+  // epoch_length: the number of blocks per epoch
+  // epochs: required number of epochs
+  pub fn get_prev_epoch_total_eligible_model_peers_count(
     model_id: u32,
     block: u64,
-    consensus_blocks_interval: u64,
-    min_required_peer_consensus_submit_epochs: u64
+    epoch_length: u64,
+    epochs: u64
   ) -> u32 {
     // Count of eligible to submit consensus data model peers
-    let mut total_submit_eligible_model_peers = 0;
+    let mut total_eligible_model_peers = 0;
     
-    // increment total_submit_eligible_model_peers with model peers that are eligible to submit consensus data
+    // increment total_eligible_model_peers with model peers that are eligible to submit consensus data
     for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
       let initialized: u64 = model_peer.initialized;
       if block > Self::get_eligible_epoch_block(
-        consensus_blocks_interval, 
+        epoch_length, 
         initialized, 
-        min_required_peer_consensus_submit_epochs
+        epochs
       ) {
-        total_submit_eligible_model_peers += 1;
+        total_eligible_model_peers += 1;
       }
     }
 
-    total_submit_eligible_model_peers
+    total_eligible_model_peers
   }
 
-  pub fn get_total_dishonesty_voting_model_peers(
+  // model_id: UID of model
+  // block: current block
+  // epoch_length: the number of blocks per epoch
+  // epochs: required number of epochs
+  pub fn get_eligible_model_peers_accounts(
     model_id: u32,
     block: u64,
-    consensus_blocks_interval: u64,
-    min_required_peer_consensus_dishonesty_epochs: u64
+    epoch_length: u64,
+    epochs: u64
+  ) -> Vec<T::AccountId> {
+    // Count of eligible to submit consensus data model peers
+    let mut account_ids: Vec<T::AccountId> = Vec::new();
+    
+    // increment total_eligible_model_peers with model peers that are eligible to submit consensus data
+    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
+      let initialized: u64 = model_peer.initialized;
+      if Self::is_epoch_block_eligible(
+        block, 
+        epoch_length, 
+        epochs, 
+        initialized
+      ) {
+        account_ids.push(model_peer.account_id)
+      }
+    }
+
+    account_ids
+  }
+
+  // model_id: UID of model
+  // block: current block
+  // epoch_length: the number of blocks per epoch
+  // epochs: required number of epochs
+  pub fn get_total_accountants(
+    model_id: u32,
+    block: u64,
+    epoch_length: u64,
+    epochs: u64
   ) -> u32 {
     // Count of eligible to submit consensus data model peers
     let mut total_submit_eligible_model_peers = 0;
@@ -504,8 +549,8 @@ impl<T: Config> Pallet<T> {
       let initialized: u64 = model_peer.initialized;
       if Self::is_epoch_block_eligible(
         block, 
-        consensus_blocks_interval, 
-        min_required_peer_consensus_dishonesty_epochs, 
+        epoch_length, 
+        epochs, 
         initialized
       ) {
         total_submit_eligible_model_peers += 1;
@@ -513,6 +558,52 @@ impl<T: Config> Pallet<T> {
     }
 
     total_submit_eligible_model_peers
+  }
+
+  // pub fn is_accountant(
+  //   model_id: u32, 
+  //   account_id: u32
+  // ) -> bool {
+  //   let account_model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
+  //   let submitter_peer_initialized: u64 = account_model_peer.initialized;
+  //   let block: u64 = Self::get_current_block_as_u64();
+  //   let epoch_length: u64 = EpochLength::<T>::get();
+  //   let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
+
+  //   return Self::is_epoch_block_eligible(
+  //     block, 
+  //     epoch_length, 
+  //     min_required_peer_accountant_epochs, 
+  //     submitter_peer_initialized
+  //   )
+  // }
+
+  /// Check if model ID exists and account has a model peer within model ID exists
+  pub fn is_model_and_model_peer(model_id: u32, account_id: T::AccountId) -> bool {
+    if !ModelsData::<T>::contains_key(model_id.clone()) {
+      return false
+    }
+
+    if !ModelPeersData::<T>::contains_key(model_id.clone(), account_id) {
+      return false
+    }
+
+    return true
+  }
+
+  /// Check if model ID exists, account has a model peer within model ID exists, and peer ID exists within model
+  // Note: We aren't checking if the account is the model peer, just if they exist at all
+  pub fn is_model_and_model_peer_and_model_peer_account(model_id: u32, peer_id: PeerId, account_id: T::AccountId) -> bool {
+    if !Self::is_model_and_model_peer(model_id.clone(), account_id) {
+      return false
+    }
+
+    let model_peer_account_exists: bool = match ModelPeerAccount::<T>::try_get(model_id.clone(), peer_id) {
+      Ok(_result) => true,
+      Err(()) => false,
+    };
+
+    return model_peer_account_exists
   }
 
   pub fn eth_into_gwei(

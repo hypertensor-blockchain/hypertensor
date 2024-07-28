@@ -23,6 +23,7 @@ use frame_support::{
 	ensure,
 	traits::{tokens::WithdrawReasons, Get, Currency, ExistenceRequirement},
 	pallet_prelude::{Weight, DispatchResultWithPostInfo},
+	storage::bounded_vec::BoundedVec
 };
 use sp_runtime::RuntimeDebug;
 use scale_info::prelude::string::String;
@@ -50,6 +51,8 @@ mod delegate_staking;
 mod emission;
 mod info;
 mod inflation_curve;
+mod proposal;
+mod accountant;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -124,10 +127,10 @@ pub mod pallet {
     SetMinRequiredModelConsensusSubmitEpochs(u64),
     SetMinRequiredPeerConsensusSubmitEpochs(u64),
     SetMinRequiredPeerConsensusEpochs(u64),
-		SetMinRequiredPeerConsensusDishonestyEpochs(u64),
+		SetMinRequiredPeerAccountantEpochs(u64),
     SetMaximumOutlierDeltaPercent(u8),
     SetModelPeerConsensusSubmitPercentRequirement(u128),
-    SetConsensusBlocksInterval(u64),
+    SetEpochLengthsInterval(u64),
     SetPeerRemovalThreshold(u128),
     SetMaxModelRewardsWeight(u128),
 		SetStakeRewardWeight(u128),
@@ -145,7 +148,11 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		/// Errors should have helpful documentation associated with them.
+
+		/// Peer hasn't been initialized for required epochs to submit consensus
 		PeerConsensusSubmitEpochNotReached,
+		/// Peer hasn't been initialized for required epochs to be an accountant
+		PeerAccountantEpochNotReached,
 		/// Maximum models reached
 		MaxModels,
 		/// Account has model peer under model already
@@ -174,7 +181,7 @@ pub mod pallet {
 		AccountIneligible,
 		// invalid submit consensus block
 		/// Cannot submit consensus during invalid blocks
-		InvalidSubmitConsensusBlock,
+		InvalidSubmitEpochLength,
 		/// Cannot remove model peer during invalid blocks
 		InvalidRemoveOrUpdateModelPeerBlock,
 		/// Transaction rate limiter exceeded
@@ -186,8 +193,8 @@ pub mod pallet {
 		/// Port invalid
 		InvalidPort,
 		// Admin
-		/// Consensus block interval invalid, must reach minimum
-		InvalidConsensusBlocksInterval,
+		/// Consensus block epoch_length invalid, must reach minimum
+		InvalidEpochLengthsInterval,
 		/// Invalid maximimum models, must not exceed maximum allowable
 		InvalidMaxModels,
 		/// Invalid min model peers, must not be less than minimum allowable
@@ -268,8 +275,30 @@ pub mod pallet {
 		/// Dishonesty voting either not exists or voting period is over
 		DishonestyVotingPeriodOver,
 
+		/// Dishonesty voting not over
+		DishonestyVotingPeriodNotOver,
+
 		/// Dishonesty voting either not exists or voting period is over
 		DishonestyVotingDuplicate,
+
+		/// Not enough balance to withdraw bid for proposal
+		NotEnoughBalanceToBid,
+
+		QuorumNotReached,
+
+		/// Dishonest propsal type
+		PropsTypeInvalid,
+
+		ProposalNotExist,
+		ProposalNotChallenged,
+		ProposalChallenged,
+		PropsalAlreadyChallenged,
+		NotChallenger,
+		ChallengePeriodPassed,
+		DuplicateVote,
+		NotAccountant,
+		InvalidAccountantDataId,
+		InvalidAccountantData,
 	}
 	
 	// Used for decoding API data - not in use in v1.0
@@ -321,10 +350,63 @@ pub mod pallet {
 		pub total_submits: u32,
 	}
 
+	// `data` is an arbitrary vec of data for subnets to use for validation
+	// It's up to each subnet to come up with their own format that fits within the BoundedVec
+	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+	pub struct AccountantDataPeerParams {
+		pub peer_id: PeerId,
+		pub data: BoundedVec<u8, DefaultAccountantDataPeerParamsMaxLimit>,
+	}
+
+	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+	pub struct AccountantDataParams<AccountId> {
+		pub accountant: AccountId,
+		pub block: u64,
+		pub epoch: u64,
+		pub data: Vec<AccountantDataPeerParams>,
+	}
+
+  #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+	pub struct VotesParams {
+    pub yay: u128,
+		pub nay: u128,
+	}
+
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+  pub enum VoteType {
+    Yay,
+    Nay,
+  }
+
+	// The `amount` parameter is the bidding amount to both initialize the proposal and to challenge the proposal
+	// The winner gets their bid back and the losers bid gets distributed to everyone in consensus including proposer
+	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+	pub struct DishonestyProposalParams<AccountId> {
+		pub model_id: u32, // model ID this proposal is taking place on
+		pub proposal_type: PropsType,
+		pub proposer: AccountId, // account proposing dishonesty vote proposal
+		pub total_accountants: u32, // total accountants at time of proposal
+		pub account_id: AccountId, // account deemed dishonest
+		pub peer_id: PeerId, // peer deemed dishonest
+		pub bid: u128, // bid amount for proposal at the time of proposal
+		// pub challenged: bool, // if peer challenged dishonesty proposal
+		pub total_votes: u32, // total sum of yay and nay votes combined
+		pub votes: VotesParams, // yay:nay votes
+		pub voters: Vec<AccountId>,	// list of voters
+		pub yay_voters: Vec<AccountId>,	// list of yay voters
+		pub nay_voters: Vec<AccountId>,	// list of nay voters
+		pub start_block: u64, // block of proposal
+		pub challenge_block: u64, // block of challenging proposal
+		pub data: Vec<u8>, // arbitrary data for subnets to use
+		pub accountant_data_id: u32, // if proposal type is dishonest account data, must submit accountant data ID
+	}
+
 	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct ModelPeerDishonestyVoteParams<AccountId> {
 		pub model_id: u32,
 		pub peer_id: PeerId,
+		pub amount: u128,
+		pub challenged: bool,
 		pub total_votes: u32,
 		pub votes: Vec<AccountId>,
 		pub start_block: u64,
@@ -346,6 +428,25 @@ pub mod pallet {
 		block: u64,
 		consensus_type: ConsensusType,
 	}
+
+	// DishonestAccountant
+	// 		- Accountant chosen to validate nodes on epochs data is dishonest
+	//		- This prevents lazy accountants
+	// DishonestModelPeer
+	//		- Accountant validating nodes proposing a node is dishonest
+	//		- Any accountant-eligible node can propose dishonesty
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+  pub enum PropsType {
+    None,
+    DishonestAccountant, // Accountant chosen to validate nodes on epochs data is dishonest
+    DishonestModelPeer, // Accountant validating nodes proposing a node is dishonest
+  }
+
+  impl Default for PropsType {
+    fn default() -> Self {
+      PropsType::None
+    }
+  }
 
 	// types
 	#[pallet::type_value]
@@ -399,10 +500,38 @@ pub mod pallet {
 		};
 	}
 	#[pallet::type_value]
+	pub fn DefaultDishonestyProposal<T: Config>() -> DishonestyProposalParams<T::AccountId> {
+		return DishonestyProposalParams {
+			model_id: 0,
+			proposal_type: PropsType::None,
+			proposer: T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap(),
+			total_accountants: 0,
+			account_id: T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap(),
+			peer_id: PeerId(Vec::new()),
+			bid: 0,
+			// challenged: false,
+			total_votes: 0,
+			votes: VotesParams {
+				yay: 0,
+				nay: 0,
+			},
+			voters: Vec::new(),
+			yay_voters: Vec::new(),
+			nay_voters: Vec::new(),
+			start_block: 0,
+			challenge_block: 0,
+			data: Vec::new(),
+			accountant_data_id: 0,
+		};
+	}
+
+	#[pallet::type_value]
 	pub fn DefaultModelPeerDishonestyVote<T: Config>() -> ModelPeerDishonestyVoteParams<T::AccountId> {
 		return ModelPeerDishonestyVoteParams {
 			model_id: 0,
 			peer_id: PeerId(Vec::new()),
+			amount: 0,
+			challenged: false,
 			total_votes: 0,
 			votes: Vec::new(),
 			start_block: 0,
@@ -439,6 +568,25 @@ pub mod pallet {
 		// 7 days
 		100800
 	}
+	#[pallet::type_value]
+	pub fn DefaultChallengePeriod<T: Config>() -> u64 {
+		// 7 days
+		1000
+	}
+	#[pallet::type_value]
+	pub fn DefaultDishonestyProposalQuorum<T: Config>() -> u128 {
+		// 7 days
+		75000
+	}
+	#[pallet::type_value]
+	pub fn DefaultDishonestyProposalConsensusThreshold<T: Config>() -> u128 {
+		// 7 days
+		9000
+	}
+	#[pallet::type_value]
+	pub fn DefaultProposalBidAmount<T: Config>() -> u128 {
+		1e+18 as u128
+	}
 	/// Must be greater than MinRequiredPeerConsensusSubmitEpochs
 	#[pallet::type_value]
 	pub fn DefaultMinRequiredModelConsensusSubmitEpochs<T: Config>() -> u64 {
@@ -457,12 +605,12 @@ pub mod pallet {
 	}
 	/// Must be greater than or equal to DefaultMinRequiredPeerConsensusSubmitEpochs
 	#[pallet::type_value]
-	pub fn DefaultMinRequiredPeerConsensusDishonestyEpochs<T: Config>() -> u64 {
+	pub fn DefaultMinRequiredPeerAccountantEpochs<T: Config>() -> u64 {
 		6
 	}
 	// Testnet 30 mins per epoch
 	#[pallet::type_value]
-	pub fn DefaultConsensusBlocksInterval<T: Config>() -> u64 {
+	pub fn DefaultEpochLength<T: Config>() -> u64 {
 		100
 	}
 	#[pallet::type_value]
@@ -496,7 +644,7 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultOptimalPeersPerModel<T: Config>() -> u32 {
-		50
+		32
 	}
 	#[pallet::type_value]
 	pub fn DefaultInflationUpperBound<T: Config>() -> u128 {
@@ -514,10 +662,6 @@ pub mod pallet {
 	pub fn DefaultLastModelInitializedBlock<T: Config>() -> u64 {
 		0
 	}
-
-	
-
-
 	#[pallet::type_value]
 	pub fn DefaultMaxModels<T: Config>() -> u32 {
 		32
@@ -637,7 +781,25 @@ pub mod pallet {
 	pub fn DefaultModelPeerConsecutiveConsensusNotSent<T: Config>() -> u32 {
 		2
 	}
-	
+	#[pallet::type_value]
+	pub fn DefaultAccountantDataChallengePeriod<T: Config>() -> u64 {
+		1000
+	}
+	#[pallet::type_value]
+	pub fn DefaultAccountantData<T: Config>() -> AccountantDataParams<T::AccountId> {
+		return AccountantDataParams {
+			accountant: T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap(),
+			block: 0,
+			epoch: 0,
+			data: Vec::new(),
+		};
+	}
+	#[pallet::type_value]
+	pub fn DefaultAccountantDataPeerParamsMaxLimit() -> u32 {
+		1024_u32
+	}
+
+
 	/// If model is activate for rewards or general blockchain interfacing
 	// model_path => boolean
 	#[pallet::storage]
@@ -1107,16 +1269,16 @@ pub mod pallet {
 	>;
 	
 	// Epochs required from model initialization block to accept consensus submissions
-	// Epochs required based on ConsensusBlocksInterval
-	// Each epoch is ConsensusBlocksInterval
+	// Epochs required based on EpochLength
+	// Each epoch is EpochLength
 	// Min required epochs for a model to be in storage for based on initialized
 	#[pallet::storage]
 	#[pallet::getter(fn min_required_model_consensus_submit_epochs)]
 	pub type MinRequiredModelConsensusSubmitEpochs<T> = StorageValue<_, u64, ValueQuery, DefaultMinRequiredModelConsensusSubmitEpochs<T>>;
 
 	// Epochs required from peer initialization block to submit consensus
-	// Epochs required based on ConsensusBlocksInterval
-	// Each epoch is ConsensusBlocksInterval
+	// Epochs required based on EpochLength
+	// Each epoch is EpochLength
 	// This must always be at least 1 epoch
 	// Must always be greater than MinRequiredPeerConsensusInclusionEpochs
 	//
@@ -1130,8 +1292,8 @@ pub mod pallet {
 	pub type MinRequiredPeerConsensusSubmitEpochs<T> = StorageValue<_, u64, ValueQuery, DefaultMinRequiredPeerConsensusSubmitEpochs<T>>;
 
 	// Epochs required to be included in consensus
-	// Epochs required based on ConsensusBlocksInterval
-	// Each epoch is ConsensusBlocksInterval
+	// Epochs required based on EpochLength
+	// Each epoch is EpochLength
 	// This must always be at least 1 epoch
 	// Must always be less than MinRequiredPeerConsensusSubmitEpochs
 	//
@@ -1144,7 +1306,7 @@ pub mod pallet {
 
 	// Epochs required to be able to propose and vote on model peer dishonesty
 	#[pallet::storage]
-	pub type MinRequiredPeerConsensusDishonestyEpochs<T> = StorageValue<_, u64, ValueQuery, DefaultMinRequiredPeerConsensusDishonestyEpochs<T>>;
+	pub type MinRequiredPeerAccountantEpochs<T> = StorageValue<_, u64, ValueQuery, DefaultMinRequiredPeerAccountantEpochs<T>>;
 
 	// Consensus data submitted and filtered per epoch
 	#[pallet::storage] // model => account_id => consensus results
@@ -1160,8 +1322,38 @@ pub mod pallet {
 		DefaultModelPeerConsensusResults<T>,
 	>;
 
-	#[pallet::storage] // Period in blocks
+	// Total count of proposals used for unique identifiers
+	#[pallet::storage]
+	pub type DishonestyProposalsCount<T> = StorageValue<_, u32, ValueQuery>;
+
+	// Track total active proposals
+	#[pallet::storage]
+	pub type ActiveDishonestyProposalsCount<T> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage] // Period in blocks for votes after challenge
 	pub type DishonestyVotingPeriod<T> = StorageValue<_, u64, ValueQuery, DefaultDishonestyVotingPeriod<T>>;
+
+	#[pallet::storage] // Period in blocks after proposal to challenge proposal
+	pub type ChallengePeriod<T> = StorageValue<_, u64, ValueQuery, DefaultChallengePeriod<T>>;
+
+	#[pallet::storage] // How many votes are needed
+	pub type DishonestyProposalQuorum<T> = StorageValue<_, u128, ValueQuery, DefaultDishonestyProposalQuorum<T>>;
+
+	// Consensus required to pass proposal
+	#[pallet::storage]
+	pub type DishonestyProposalConsensusThreshold<T> = StorageValue<_, u128, ValueQuery, DefaultDishonestyProposalConsensusThreshold<T>>;
+
+	#[pallet::storage] // model_id => proposal_id => proposal parameters
+	pub type DishonestyProposal<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		u32,
+		Identity,
+		u32,
+		DishonestyProposalParams<T::AccountId>,
+		ValueQuery,
+		DefaultDishonestyProposal<T>,
+	>;
 
 	#[pallet::storage] // model => account_id => proposals
 	pub type ModelPeerDishonestyVote<T: Config> = StorageDoubleMap<
@@ -1174,6 +1366,58 @@ pub mod pallet {
 		ValueQuery,
 		DefaultModelPeerDishonestyVote<T>,
 	>;
+
+	// Amount required to put up as a proposer and challenger
+	#[pallet::storage] 
+	pub type ProposalBidAmount<T> = StorageValue<_, u128, ValueQuery, DefaultProposalBidAmount<T>>;
+
+	#[pallet::storage]
+	pub type AccountantDataCount<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		u32,
+		u32,
+		ValueQuery,
+	>;
+
+	#[pallet::storage] // model ID => data_id => data
+	pub type AccountantData<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		u32,
+		Identity,
+		u32,
+		AccountantDataParams<T::AccountId>,
+		ValueQuery,
+		DefaultAccountantData<T>,
+	>;
+
+	#[pallet::storage] // model ID => account_id
+	pub type CurrentAccountant<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		u32,
+		T::AccountId,
+		ValueQuery,
+		DefaultAccountId<T>,
+	>;
+
+	// The current logic uses one accountant
+	// This allows multiple accountants per epoch
+	#[pallet::storage]
+	pub type CurrentAccountant2<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		u32,
+		BTreeMap<T::AccountId, bool>,
+		ValueQuery,
+		// DefaultAccountId<T>,
+	>;
+
+
+	// Time in blocks from data submission to challenge accountants data submission
+	#[pallet::storage] 
+	pub type AccountantDataChallengePeriod<T> = StorageValue<_, u64, ValueQuery, DefaultAccountantDataChallengePeriod<T>>;
 
 	// Maximum delta a score can be from the average without incurring penalties
 	#[pallet::storage]
@@ -1209,7 +1453,7 @@ pub mod pallet {
 
 	// Blocks per consensus form
 	#[pallet::storage]
-	pub type ConsensusBlocksInterval<T: Config> = StorageValue<_, u64, ValueQuery, DefaultConsensusBlocksInterval<T>>;
+	pub type EpochLength<T: Config> = StorageValue<_, u64, ValueQuery, DefaultEpochLength<T>>;
 
 	// Consensus threshold percentage for peer to be removed
 	// If a peer is not sent in by enough of other peers based on PeerRemovalThreshold
@@ -1251,6 +1495,7 @@ pub mod pallet {
 	#[pallet::storage] // maximum percentage of rewards a model can have per epoch
 	pub type MaxModelRewardsWeight<T> = StorageValue<_, u128, ValueQuery, DefaultMaxModelRewardsWeight<T>>;
 
+
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
@@ -1267,7 +1512,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let account_id: T::AccountId = ensure_signed(origin)?;
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// Ensure account is eligible
@@ -1283,8 +1528,8 @@ pub mod pallet {
 			// Submitting consensus data during consensus steps will interfere
 			// with the storage elements required to run consensus steps
 			ensure!(
-				Self::can_submit_consensus(block, consensus_blocks_interval),
-				Error::<T>::InvalidSubmitConsensusBlock
+				Self::can_submit_consensus(block, epoch_length),
+				Error::<T>::InvalidSubmitEpochLength
 			);
 
 			// Ensure model exists
@@ -1329,11 +1574,11 @@ pub mod pallet {
 			// We get the eligible start block
 			//
 			// We use this here instead of when initializing the model or peer in order to keep the required time
-			// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+			// universal in the case models or peers are added before an update to the EpochLength
 			//
 			// e.g. Can't submit consensus if the following parameters
 			//			• model initialized		0
-			//			• interval 						20
+			//			• epoch_length 						20
 			//			• epochs							10
 			//			• current block 			199
 			//	eligible block is 200
@@ -1343,7 +1588,7 @@ pub mod pallet {
 			//
 			// e.g. Can submit consensus if the following parameters
 			//			• model initialized		0
-			//			• interval 						20
+			//			• epoch_length 						20
 			//			• epochs							10
 			//			• current block 			205
 			//	eligible block is 200
@@ -1353,7 +1598,7 @@ pub mod pallet {
 			//
 			ensure!(
 				block >= Self::get_eligible_epoch_block(
-					consensus_blocks_interval, 
+					epoch_length, 
 					model_initialized, 
 					min_required_model_consensus_submit_epochs
 				),
@@ -1371,11 +1616,11 @@ pub mod pallet {
 			// We get the eligible start block
 			//
 			// We use this here instead of when initializing the model or peer in order to keep the required time
-			// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+			// universal in the case models or peers are added before an update to the EpochLength
 			ensure!(
 				Self::is_epoch_block_eligible(
 					block, 
-					consensus_blocks_interval, 
+					epoch_length, 
 					min_required_peer_consensus_submit_epochs, 
 					submitter_peer_initialized
 				),
@@ -1383,10 +1628,10 @@ pub mod pallet {
 			);
 
 			// Count of eligible to submit consensus data model peers
-			let total_submittable_model_peers: u32 = Self::get_total_submittable_model_peers(
+			let total_submittable_model_peers: u32 = Self::get_total_eligible_model_peers_count(
 				model_id.clone(),
 				block,
-				consensus_blocks_interval,
+				epoch_length,
 				min_required_peer_consensus_submit_epochs
 			);
 
@@ -1420,10 +1665,10 @@ pub mod pallet {
 				// We get the eligible start block
 				//
 				// We use this here instead of when initializing the model or peer in order to keep the required time
-				// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+				// universal in the case models or peers are added before an update to the EpochLength
 				let do_include: bool = Self::is_epoch_block_eligible(
 					block, 
-					consensus_blocks_interval, 
+					epoch_length, 
 					min_required_consensus_inclusion_epochs, 
 					blockchain_peer_initialized
 				);
@@ -1567,7 +1812,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let account_id: T::AccountId = ensure_signed(origin)?;
 			
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// Ensure 
@@ -1575,8 +1820,8 @@ pub mod pallet {
 			// • Emissions aren't being generated
 			// • Model peers can't be removed
 			ensure!(
-				Self::can_submit_consensus(block, consensus_blocks_interval),
-				Error::<T>::InvalidSubmitConsensusBlock
+				Self::can_submit_consensus(block, epoch_length),
+				Error::<T>::InvalidSubmitEpochLength
 			);
 
 			// Ensure model exists
@@ -1601,11 +1846,11 @@ pub mod pallet {
 			// We get the eligible start block
 			//
 			// We use this here instead of when initializing the model or peer in order to keep the required time
-			// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+			// universal in the case models or peers are added before an update to the EpochLength
 			//
 			// e.g. Can't submit consensus if the following parameters
 			//			• model initialized		0
-			//			• interval 						20
+			//			• epoch_length 						20
 			//			• epochs							10
 			//			• current block 			199
 			//	eligible block is 200
@@ -1615,7 +1860,7 @@ pub mod pallet {
 			//
 			// e.g. Can submit consensus if the following parameters
 			//			• model initialized		0
-			//			• interval 						20
+			//			• epoch_length 						20
 			//			• epochs							10
 			//			• current block 			205
 			//	eligible block is 200
@@ -1625,7 +1870,7 @@ pub mod pallet {
 			//
 			ensure!(
 				block >= Self::get_eligible_epoch_block(
-					consensus_blocks_interval, 
+					epoch_length, 
 					model_initialized, 
 					min_required_model_consensus_submit_epochs
 				),
@@ -1643,11 +1888,11 @@ pub mod pallet {
 			// We get the eligible start block
 			//
 			// We use this here instead of when initializing the model or peer in order to keep the required time
-			// universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+			// universal in the case models or peers are added before an update to the EpochLength
 			ensure!(
 				Self::is_epoch_block_eligible(
 					block, 
-					consensus_blocks_interval, 
+					epoch_length, 
 					min_required_peer_consensus_submit_epochs, 
 					submitter_peer_initialized
 				),
@@ -1655,10 +1900,10 @@ pub mod pallet {
 			);
 
 			// Count of eligible to submit consensus data model peers
-			let total_submittable_model_peers: u32 = Self::get_total_submittable_model_peers(
+			let total_submittable_model_peers: u32 = Self::get_total_eligible_model_peers_count(
 				model_id.clone(),
 				block,
-				consensus_blocks_interval,
+				epoch_length,
 				min_required_peer_consensus_submit_epochs
 			);
 
@@ -1780,7 +2025,7 @@ pub mod pallet {
 				);
 
 				if !can_withdraw {
-					// If fee cannot be covered then return
+					// If fee cannot be covered then return function as Ok()
 					return Ok(())
 				}
 
@@ -1899,12 +2144,12 @@ pub mod pallet {
 			let block: u64 = Self::get_current_block_as_u64();
 			let mut has_min_peers: bool = true;
 			if total_model_peers < min_model_peers {
-				let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+				let epoch_length: u64 = EpochLength::<T>::get();
 				let model_peers_initialization_epochs: u64 = ModelPeersInitializationEpochs::<T>::get();
 				// Ensure initialization epochs have passed
 				// If not return false
 				let initialized: bool = block < Self::get_eligible_epoch_block(
-					consensus_blocks_interval, 
+					epoch_length, 
 					model_initialized, 
 					model_peers_initialization_epochs
 				);
@@ -1971,14 +2216,14 @@ pub mod pallet {
 		) -> DispatchResult {
 			let account_id: T::AccountId = ensure_signed(origin.clone())?;
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// Not required since emissions are calculated for in-consensus model peers only
 			// // Ensure consensus isn't being formed or emissions are being generated
 			// ensure!(
-			// 	!Self::is_in_consensus_steps(block, consensus_blocks_interval),
-			// 	Error::<T>::InvalidSubmitConsensusBlock
+			// 	!Self::is_in_consensus_steps(block, epoch_length),
+			// 	Error::<T>::InvalidSubmitEpochLength
 			// );
 
 			ensure!(
@@ -2044,18 +2289,6 @@ pub mod pallet {
 				stake_to_be_added,
 			).map_err(|e| e)?;
 
-			// match Self::do_add_stake(
-			// 	origin.clone(), 
-			// 	model_id.clone(),
-			// 	account_id.clone(),
-			// 	stake_to_be_added,
-			// ) {
-			// 	Ok(stake) => (),
-			// 	Err(err) => {
-			// 		ensure!(false, err);
-			// 	}
-			// }
-
 			// ====================
 			// Insert peer into storage
 			// ====================
@@ -2093,7 +2326,7 @@ pub mod pallet {
 				// Based on either initialized block or removal block
 				ensure!(
 					block >= Self::get_eligible_epoch_block(
-						consensus_blocks_interval, 
+						epoch_length, 
 						block_initialized_or_removed, 
 						min_required_unstake_epochs
 					),
@@ -2133,7 +2366,7 @@ pub mod pallet {
 			model_id: u32, 
 			peer_id: PeerId,
 		) -> DispatchResult {
-			let account_id: T::AccountId = ensure_signed(origin.clone())?;
+			let account_id: T::AccountId = ensure_signed(origin)?;
 
 			// --- Ensure model exists
 			ensure!(
@@ -2167,11 +2400,11 @@ pub mod pallet {
 			let model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
 
 			let block: u64 = Self::get_current_block_as_u64();
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 
 			// Ensure updates are happening before consensus submissions
 			ensure!(
-				Self::can_remove_or_update_model_peer(block, consensus_blocks_interval),
+				Self::can_remove_or_update_model_peer(block, epoch_length),
 				Error::<T>::InvalidRemoveOrUpdateModelPeerBlock
 			);
 
@@ -2187,7 +2420,7 @@ pub mod pallet {
 			ensure!(
 				Self::is_epoch_block_eligible(
 					block, 
-					consensus_blocks_interval, 
+					epoch_length, 
 					min_required_peer_consensus_submit_epochs, 
 					model_peer.initialized
 				),
@@ -2231,14 +2464,14 @@ pub mod pallet {
 			model_id: u32, 
 			// model_path: Vec<u8>, 
 		) -> DispatchResult {
-			let account_id: T::AccountId = ensure_signed(origin.clone())?;
+			let account_id: T::AccountId = ensure_signed(origin)?;
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// ensure!(
-			// 	!Self::is_in_consensus_steps(block, consensus_blocks_interval),
-			// 	Error::<T>::InvalidSubmitConsensusBlock
+			// 	!Self::is_in_consensus_steps(block, epoch_length),
+			// 	Error::<T>::InvalidSubmitEpochLength
 			// );
 
 			// --- Ensure model exists
@@ -2252,13 +2485,15 @@ pub mod pallet {
 				Error::<T>::ModelPeerNotExist
 			);
 
+			// @todo: Ensure peer is not a proposer, voter, or challenger in a dishonesty proposal
+
 			let model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
 
 			let min_required_consensus_inclusion_epochs = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
 
 			// Check if model peer is eligible to be included in consensus data submissions
 			let is_included: bool = block >= Self::get_eligible_epoch_block(
-				consensus_blocks_interval, 
+				epoch_length, 
 				model_peer.initialized, 
 				min_required_consensus_inclusion_epochs
 			);
@@ -2274,7 +2509,7 @@ pub mod pallet {
 				// if a model peer exits on a block another peer is submitting data on as it can
 				// revert the model peers submission due to data array length requirements
 				ensure!(
-					Self::can_remove_or_update_model_peer(block, consensus_blocks_interval),
+					Self::can_remove_or_update_model_peer(block, epoch_length),
 					Error::<T>::InvalidRemoveOrUpdateModelPeerBlock
 				);
 			}
@@ -2295,9 +2530,9 @@ pub mod pallet {
 			origin: OriginFor<T>, 
 			account_id: T::AccountId, 
 		) -> DispatchResult {
-			ensure_signed(origin.clone())?;
+			ensure_signed(origin)?;
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// We can skip `can_remove_or_update_model_peer` because no peers in consensus results
@@ -2305,7 +2540,7 @@ pub mod pallet {
 
 			// Ensure consensus isn't being formed or emissions are being generated
 			// ensure!(
-			// 	Self::can_remove_or_update_model_peer(block, consensus_blocks_interval),
+			// 	Self::can_remove_or_update_model_peer(block, epoch_length),
 			// 	Error::<T>::InvalidRemoveOrUpdateModelPeerBlock
 			// );
 
@@ -2328,7 +2563,7 @@ pub mod pallet {
 			model_id: u32, 
 			port: u16,
 		) -> DispatchResult {
-			let account_id: T::AccountId = ensure_signed(origin.clone())?;
+			let account_id: T::AccountId = ensure_signed(origin)?;
 
 			// --- Ensure model exists
 			ensure!(
@@ -2375,13 +2610,13 @@ pub mod pallet {
 			// Staking is accounted for per account_id per model_id
 			// We only check that origin exists within ModelPeersData
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// Ensure consensus isn't being formed or emissions are being generated
 			ensure!(
-				!Self::is_in_consensus_steps(block, consensus_blocks_interval),
-				Error::<T>::InvalidSubmitConsensusBlock
+				!Self::is_in_consensus_steps(block, epoch_length),
+				Error::<T>::InvalidSubmitEpochLength
 			);
 
 			// --- Ensure model exists
@@ -2421,8 +2656,8 @@ pub mod pallet {
 
 			// // Ensure consensus isn't being formed or emissions are being generated
 			// ensure!(
-			// 	!Self::is_in_consensus_steps(block, consensus_blocks_interval),
-			// 	Error::<T>::InvalidSubmitConsensusBlock
+			// 	!Self::is_in_consensus_steps(block, epoch_length),
+			// 	Error::<T>::InvalidSubmitEpochLength
 			// );
 
       // Get ModelAccount (this is not deleted until stake == 0)
@@ -2447,14 +2682,14 @@ pub mod pallet {
 			};
 			let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<T>::get();
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			// Ensure min required epochs have surpassed to unstake
 			// Based on either initialized block or removal block
 			ensure!(
 				block >= Self::get_eligible_epoch_block(
-					consensus_blocks_interval, 
+					epoch_length, 
 					block_initialized_or_removed, 
 					min_required_unstake_epochs
 				),
@@ -2531,7 +2766,7 @@ pub mod pallet {
 			let account_id: T::AccountId = ensure_signed(origin.clone())?;
 
 			let min_required_delegate_unstake_epochs = MinRequiredDelegateUnstakeEpochs::<T>::get();
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 			let block: u64 = Self::get_current_block_as_u64();
 
 			let mut model_account_delegate_stakes: BTreeMap<T::AccountId, u64> = ModelAccountDelegateStake::<T>::get(model_id.clone());
@@ -2550,7 +2785,7 @@ pub mod pallet {
 			// Based on either initialized block or removal block
 			ensure!(
 				block >= Self::get_eligible_epoch_block(
-					consensus_blocks_interval, 
+					epoch_length, 
 					block_added, 
 					min_required_delegate_unstake_epochs
 				),
@@ -2576,7 +2811,7 @@ pub mod pallet {
 			peer_id: PeerId,
 			data: Vec<u8>,
 		) -> DispatchResult {
-			let account_id: T::AccountId = ensure_signed(origin.clone())?;
+			let account_id: T::AccountId = ensure_signed(origin)?;
 
 			// --- Ensure model exists
 			ensure!(
@@ -2590,21 +2825,21 @@ pub mod pallet {
 				Error::<T>::ModelPeerNotExist
 			);
 		
-			// --- Ensure proposer is submittable
+			// --- Ensure proposer is accountant
 			let account_model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
 			let submitter_peer_initialized: u64 = account_model_peer.initialized;
 			let block: u64 = Self::get_current_block_as_u64();
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
-			let min_required_peer_consensus_dishonesty_epochs: u64 = MinRequiredPeerConsensusDishonestyEpochs::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
+			let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
 
 			ensure!(
 				Self::is_epoch_block_eligible(
 					block, 
-					consensus_blocks_interval, 
-					min_required_peer_consensus_dishonesty_epochs, 
+					epoch_length, 
+					min_required_peer_accountant_epochs, 
 					submitter_peer_initialized
 				),
-				Error::<T>::PeerConsensusSubmitEpochNotReached
+				Error::<T>::PeerAccountantEpochNotReached
 			);
 
 			// Unique model_id -> PeerId
@@ -2620,17 +2855,17 @@ pub mod pallet {
 			);
 
 			// --- Ensure the minimum required model peers exist
-			let total_voting_model_peers = Self::get_total_dishonesty_voting_model_peers(
+			let total_accountants = Self::get_total_accountants(
 				model_id.clone(),
 				block,
-				consensus_blocks_interval,
-				min_required_peer_consensus_dishonesty_epochs
+				epoch_length,
+				min_required_peer_accountant_epochs
 			);
 
 			// There must always be the required minimum model peers for each vote
 			let min_model_peers: u32 = MinModelPeers::<T>::get();
 			ensure!(
-				total_voting_model_peers >= min_model_peers,
+				total_accountants >= min_model_peers,
 				Error::<T>::ModelPeersMin
 			);
 
@@ -2643,13 +2878,17 @@ pub mod pallet {
 			let dishonesty_voting_period: u64 = DishonestyVotingPeriod::<T>::get();
 			let max_block = dishonesty_vote_start_block + dishonesty_voting_period;
 
+			// --- Ensure we can create a new proposal
+			// If a proposal was already created for the model ID and account then we cannot create a new proposal
 			ensure!(
 				block > max_block,
 				Error::<T>::DishonestyVotePeriodCompleted
-			);	
+			);
 
 			let mut votes: Vec<T::AccountId> = Vec::new();
 			votes.push(account_id.clone());
+
+			let proposal_bid_amout: u128 = ProposalBidAmount::<T>::get();
 
 			// This will insert or reset any previous voting on the model_id => account_id
 			ModelPeerDishonestyVote::<T>::mutate(
@@ -2658,8 +2897,9 @@ pub mod pallet {
 				|params: &mut ModelPeerDishonestyVoteParams<T::AccountId>| {
 					params.model_id = model_id.clone();
 					params.peer_id = peer_id.clone();
+					params.amount = proposal_bid_amout.clone();
+					params.challenged = false;
 					params.total_votes = 1;
-					// params.votes = Vec<<T as Config>::AccountId>::from(account_id.clone());
 					params.votes = votes;
 					params.start_block = block;
 					params.data = data;
@@ -2679,12 +2919,54 @@ pub mod pallet {
 
 		#[pallet::call_index(14)]
 		#[pallet::weight({0})]
+		pub fn challenge_model_peer_dishonest(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			peer_id: PeerId
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			// --- Ensure model exists
+			ensure!(
+				ModelsData::<T>::contains_key(model_id.clone()),
+				Error::<T>::ModelNotExist
+			);
+
+			// --- Ensure account has peer
+			ensure!(
+				ModelPeersData::<T>::contains_key(model_id.clone(), account_id.clone()),
+				Error::<T>::ModelPeerNotExist
+			);
+
+			// Unique model_id -> PeerId
+			// Ensure peer ID exists within model
+			let model_peer_account: (bool, T::AccountId) = match ModelPeerAccount::<T>::try_get(model_id.clone(), peer_id.clone()) {
+				Ok(_result) => (true, _result),
+				Err(()) => (false, T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap()),
+			};
+
+			ensure!(
+				model_peer_account.0,
+				Error::<T>::PeerIdNotExist
+			);
+
+			// --- Ensure dishonesty proposal exists
+			ensure!(
+				ModelPeerDishonestyVote::<T>::contains_key(model_id.clone(), model_peer_account.clone().1),
+				Error::<T>::DishonestyVoteNotProposed
+			);
+			
+			Ok(())
+		}
+
+		#[pallet::call_index(15)]
+		#[pallet::weight({0})]
 		pub fn vote_model_peer_dishonest(
 			origin: OriginFor<T>, 
 			model_id: u32,
 			peer_id: PeerId
 		) -> DispatchResult {
-			let account_id: T::AccountId = ensure_signed(origin.clone())?;
+			let account_id: T::AccountId = ensure_signed(origin)?;
 
 			// --- Ensure model exists
 			ensure!(
@@ -2702,30 +2984,30 @@ pub mod pallet {
 			let account_model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
 			let submitter_peer_initialized: u64 = account_model_peer.initialized;
 			let block: u64 = Self::get_current_block_as_u64();
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
-			let min_required_peer_consensus_dishonesty_epochs: u64 = MinRequiredPeerConsensusDishonestyEpochs::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
+			let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
 
 			ensure!(
 				Self::is_epoch_block_eligible(
 					block, 
-					consensus_blocks_interval, 
-					min_required_peer_consensus_dishonesty_epochs, 
+					epoch_length, 
+					min_required_peer_accountant_epochs, 
 					submitter_peer_initialized
 				),
 				Error::<T>::PeerConsensusSubmitEpochNotReached
 			);
 
 			// --- Ensure the minimum required model peers exist
-			let total_voting_model_peers = Self::get_total_dishonesty_voting_model_peers(
+			let total_accountants = Self::get_total_accountants(
 				model_id.clone(),
 				block,
-				consensus_blocks_interval,
-				min_required_peer_consensus_dishonesty_epochs
+				epoch_length,
+				min_required_peer_accountant_epochs
 			);
 
 			let min_model_peers: u32 = MinModelPeers::<T>::get();
 			ensure!(
-				total_voting_model_peers >= min_model_peers,
+				total_accountants >= min_model_peers,
 				Error::<T>::ModelPeersMin
 			);
 
@@ -2785,7 +3067,7 @@ pub mod pallet {
 			// The account will be removed across all models
 			let removal_consensus_percentage: u128 = Self::percent_div(
 				(model_peer_dishonesty_vote.total_votes + 1) as u128, 
-				total_voting_model_peers as u128
+				total_accountants as u128
 			);
 
 
@@ -2819,32 +3101,99 @@ pub mod pallet {
 			Ok(())
 		}
 
+		#[pallet::call_index(16)]
+		#[pallet::weight({0})]
+		pub fn finalize_model_peer_dishonest(
+			origin: OriginFor<T>,
+			model_id: u32,
+			peer_id: PeerId,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			// --- Ensure model exists
+			ensure!(
+				ModelsData::<T>::contains_key(model_id.clone()),
+				Error::<T>::ModelNotExist
+			);
+
+			// --- Ensure account has peer
+			ensure!(
+				ModelPeersData::<T>::contains_key(model_id.clone(), account_id.clone()),
+				Error::<T>::ModelPeerNotExist
+			);
+
+			// --- Check proposal quorum reached
+
+
+			// If quorum not reached, ensure everyone gets their funds back
+
+
+			// --- Check proposal outcome
+
+
+			// --- Get all peers in consensus
+
+
+			// --- Reward all peers in consensus
+
+			Ok(())
+		}
+
+		#[pallet::call_index(17)]
+		#[pallet::weight({0})]
+		pub fn upload_accountant_data(
+			origin: OriginFor<T>,
+			model_id: u32,
+			data: Vec<u8>,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Ok(())
+		}
+
+		#[pallet::call_index(18)]
+		#[pallet::weight({0})]
+		pub fn challenge_accountant_data(origin: OriginFor<T>) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Ok(())
+		}
+
+		#[pallet::call_index(19)]
+		#[pallet::weight({0})]
+		pub fn vote_challenge_accountant_data(origin: OriginFor<T>) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Ok(())
+		}
+
+
 		// Testing purposes only
-		#[pallet::call_index(15)]
+		#[pallet::call_index(20)]
 		#[pallet::weight({0})]
 		pub fn form_consensus(origin: OriginFor<T>) -> DispatchResult {
 			let block: u64 = Self::get_current_block_as_u64();
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
   
-			if block % consensus_blocks_interval == 0 {
+			if block % epoch_length == 0 {
 			}
 
-			ensure!(block % consensus_blocks_interval == 0, "e");
+			ensure!(block % epoch_length == 0, "e");
 
 			Self::form_peer_consensus(block);
 			Ok(())
 		}
 	
 		// Testing purposes only
-		#[pallet::call_index(16)]
+		#[pallet::call_index(21)]
 		#[pallet::weight({0})]
 		pub fn do_generate_emissions(origin: OriginFor<T>) -> DispatchResult {
 			let block: u64 = Self::get_current_block_as_u64();
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 	
-			ensure!((block - 1) % consensus_blocks_interval == 0, "Error block generate_emissions");
+			ensure!((block - 1) % epoch_length == 0, "Error block generate_emissions");
 
 			Self::generate_emissions();
 
@@ -2867,7 +3216,7 @@ pub mod pallet {
 		}
 
 		// Testing purposes only
-		#[pallet::call_index(17)]
+		#[pallet::call_index(22)]
 		#[pallet::weight({0})]
 		pub fn vote_model(origin: OriginFor<T>, model_path: Vec<u8>) -> DispatchResult {
 			ModelActivated::<T>::insert(model_path.clone(), true);
@@ -2875,7 +3224,7 @@ pub mod pallet {
 		}
 
 		// Testing purposes only
-		#[pallet::call_index(18)]
+		#[pallet::call_index(23)]
 		#[pallet::weight({0})]
 		pub fn vote_model_out(origin: OriginFor<T>, model_path: Vec<u8>) -> DispatchResult {
 			ModelActivated::<T>::insert(model_path.clone(), false);
@@ -2883,31 +3232,31 @@ pub mod pallet {
 		}
 
 		// Testing purposes only
-		#[pallet::call_index(19)]
+		#[pallet::call_index(24)]
 		#[pallet::weight({0})]
 		pub fn form_consensus_no_consensus_weight_test(origin: OriginFor<T>) -> DispatchResult {
 			let block: u64 = Self::get_current_block_as_u64();
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
   
-			if block % consensus_blocks_interval == 0 {
+			if block % epoch_length == 0 {
 			}
 
-			if (block - 1) % consensus_blocks_interval == 0 {
+			if (block - 1) % epoch_length == 0 {
 			}
 
 			Ok(())
 		}
 
 		// Testing purposes only
-		#[pallet::call_index(20)]
+		#[pallet::call_index(25)]
 		#[pallet::weight({0})]
 		pub fn do_generate_emissionsf(origin: OriginFor<T>) -> DispatchResult {
 			let block: u64 = Self::get_current_block_as_u64();
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
 	
-			ensure!((block - 1) % consensus_blocks_interval == 0, "Error block generate_emissionsf");
+			ensure!((block - 1) % epoch_length == 0, "Error block generate_emissionsf");
 
 			Self::generate_emissionsf(block);
 
@@ -2920,6 +3269,221 @@ pub mod pallet {
 			Ok(())
 		}
 		
+		#[pallet::call_index(26)]
+		#[pallet::weight({0})]
+		pub fn propose_dishonesty(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			peer_id: PeerId,
+			proposal_type: PropsType,
+			data: Vec<u8>,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+      ensure!(
+				proposal_type != PropsType::None,
+				Error::<T>::PropsTypeInvalid
+			);
+
+			// --- Ensure model exists
+			ensure!(
+				ModelsData::<T>::contains_key(model_id.clone()),
+				Error::<T>::ModelNotExist
+			);
+
+			// --- Ensure account has peer
+			ensure!(
+				ModelPeersData::<T>::contains_key(model_id.clone(), account_id.clone()),
+				Error::<T>::ModelPeerNotExist
+			);
+			
+			// --- Ensure peer to propose as dishonest exists
+			let model_peer_account: (bool, T::AccountId) = match ModelPeerAccount::<T>::try_get(model_id.clone(), peer_id.clone()) {
+				Ok(_result) => (true, _result),
+				Err(()) => (false, T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap()),
+			};
+
+			ensure!(
+				model_peer_account.0,
+				Error::<T>::PeerIdNotExist
+			);
+
+			// Get proposal big amount and store in proposal in case this updates
+			let proposal_bid_amout: u128 = ProposalBidAmount::<T>::get();
+			let proposal_bid_amout_as_balance = Self::u128_to_balance(proposal_bid_amout);
+
+			let can_withdraw: bool = Self::can_remove_balance_from_coldkey_account(
+				&account_id,
+				proposal_bid_amout_as_balance.unwrap(),
+			);
+
+			ensure!(
+				can_withdraw,
+				Error::<T>::NotEnoughBalanceToBid
+			);
+
+			// --- Withdraw bid amount from proposer accounts
+			let _ = T::Currency::withdraw(
+				&account_id,
+				proposal_bid_amout_as_balance.unwrap(),
+				WithdrawReasons::except(WithdrawReasons::TRANSFER),
+				ExistenceRequirement::KeepAlive,
+			);
+
+			// --- Ensure the proposalled peer to be dishonest doesn't already have a proposal with the same type
+			let proposal_index = DishonestyProposalsCount::<T>::get();
+			
+			let block: u64 = Self::get_current_block_as_u64();
+
+			let challenge_period = ChallengePeriod::<T>::get();
+
+			// Self::account_has_active_proposal(
+			// 	model_id.clone(), 
+			// 	model_peer_account.1, 
+			// 	proposal_type,
+			// 	block,
+			// );
+
+			let mut voters: Vec<T::AccountId> = Vec::new();
+			voters.push(account_id.clone());
+
+			let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
+			let total_accountants = Self::get_total_accountants(
+				model_id.clone(),
+				block,
+				epoch_length,
+				min_required_peer_accountant_epochs
+			);
+
+			// --- Initiate proposal
+			DishonestyProposal::<T>::mutate(
+				model_id.clone(),
+				proposal_index,
+				|params: &mut DishonestyProposalParams<T::AccountId>| {
+					params.model_id = model_id.clone();
+					params.proposal_type = proposal_type;
+					params.proposer = account_id.clone();
+					params.total_accountants = total_accountants;
+					params.account_id = model_peer_account.1;
+					params.peer_id = peer_id.clone();
+					params.bid = proposal_bid_amout;
+					// params.challenged = false;
+					params.total_votes = 1;
+					params.votes = VotesParams {
+						yay: 1,
+						nay: 0,
+					};
+					params.voters = voters.clone();
+					params.yay_voters = voters.clone();
+					params.nay_voters = Vec::new();
+					params.start_block = block;
+					params.challenge_block = 0;
+					params.data = data;
+				}
+			);
+
+			// --- Increase proposal counter
+			DishonestyProposalsCount::<T>::put(proposal_index + 1);
+
+			Ok(())
+		}
+
+		#[pallet::call_index(27)]
+		#[pallet::weight({0})]
+		pub fn challenge_dishonesty(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			proposal_index: u32,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Self::try_challenge_dishonesty(
+				account_id, 
+				model_id,
+				proposal_index,
+			)
+		}
+
+		#[pallet::call_index(28)]
+		#[pallet::weight({0})]
+		pub fn vote(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			proposal_index: u32,
+			vote: VoteType
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Self::try_vote(
+				account_id, 
+				model_id,
+				proposal_index,
+				vote
+			)
+		}
+
+		#[pallet::call_index(29)]
+		#[pallet::weight({0})]
+		pub fn finalize_proposal(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			proposal_index: u32,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Self::try_finalize_proposal(
+				model_id,
+				proposal_index,
+			)
+		}
+
+		#[pallet::call_index(30)]
+		#[pallet::weight({0})]
+		pub fn cancel_proposal(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			proposal_index: u32,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Self::try_cancel_proposal(
+				account_id,
+				model_id,
+				proposal_index
+			)
+		}
+
+		/// Delete proposals that are no longer live
+		#[pallet::call_index(31)]
+		#[pallet::weight({0})]
+		pub fn submit_accountant_data(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			data: Vec<AccountantDataPeerParams>,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Self::try_submit_accountant_data(
+				account_id,
+				model_id,
+				data,		
+			)
+		}
+
+		/// Delete proposals that are no longer live
+		#[pallet::call_index(32)]
+		#[pallet::weight({0})]
+		pub fn clean_proposals(
+			origin: OriginFor<T>, 
+			model_id: u32,
+			proposal_index: u32,
+		) -> DispatchResult {
+			let account_id: T::AccountId = ensure_signed(origin)?;
+
+			Ok(())
+		}
+
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -2976,12 +3540,12 @@ pub mod pallet {
 			let mut has_min_peers: bool = true;
 			if total_model_peers < min_model_peers {
 				let block: u64 = Self::get_current_block_as_u64();
-				let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+				let epoch_length: u64 = EpochLength::<T>::get();
 				let model_peers_initialization_epochs: u64 = ModelPeersInitializationEpochs::<T>::get();
 				// Ensure initialization epochs have passed
 				// If not return false
 				let has_min_peers: bool = block < Self::get_eligible_epoch_block(
-					consensus_blocks_interval, 
+					epoch_length, 
 					model_initialized, 
 					model_peers_initialization_epochs
 				);
@@ -3000,10 +3564,10 @@ pub mod pallet {
 		fn on_initialize(block_number: BlockNumberFor<T>) -> Weight {
 			let block: u64 = Self::convert_block_as_u64(block_number);
 
-			let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+			let epoch_length: u64 = EpochLength::<T>::get();
   
 			// Form peer consensus at the beginning of each epoch on the last epochs data
-			if block >= consensus_blocks_interval && block % consensus_blocks_interval == 0 {
+			if block >= epoch_length && block % epoch_length == 0 {
 				log::info!("Forming peer consensus...");
 				Self::form_peer_consensus(block);
 				return Weight::from_parts(207_283_478_000, 22166406)
@@ -3012,7 +3576,7 @@ pub mod pallet {
 			}
 
 			// Run the block succeeding form consensus
-			if (block - 1) >= consensus_blocks_interval && (block - 1) % consensus_blocks_interval == 0 {
+			if (block - 1) >= epoch_length && (block - 1) % epoch_length == 0 {
 				log::info!("Generating emissions...");
 				Self::generate_emissions();
 
@@ -3038,6 +3602,19 @@ pub mod pallet {
 					.saturating_add(T::DbWeight::get().writes(6082_u64));
 			}
 	
+			if (block - 2) >= epoch_length && (block - 2) % epoch_length == 0 {
+				// Get accountant logic to run
+
+				// --- Ensure previous epochs accountants submitted data
+
+
+				// --- Choose new accountants
+
+
+				// --- Last block step, update epoch
+				// EpochLength::<T>::put(EpochLength::<T>::get() + 1);
+			}
+
 			return Weight::from_parts(8_054_000, 1638)
 				.saturating_add(T::DbWeight::get().reads(1_u64))
 		}
@@ -3067,11 +3644,11 @@ pub mod pallet {
 			let min_required_model_consensus_submit_epochs: u64 = MinRequiredModelConsensusSubmitEpochs::<T>::get();
 			let min_required_peer_consensus_submit_epochs: u64 = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
 			let min_required_peer_consensus_inclusion_epochs: u64 = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
-			let min_required_peer_consensus_dishonesty_epochs: u64 = MinRequiredPeerConsensusDishonestyEpochs::<T>::get();
+			let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
 
 			let requirement_one: bool = min_required_model_consensus_submit_epochs > min_required_peer_consensus_submit_epochs;
 			let requirement_two: bool = min_required_peer_consensus_submit_epochs > min_required_peer_consensus_inclusion_epochs;
-			let requirement_three: bool = min_required_peer_consensus_dishonesty_epochs >= min_required_peer_consensus_submit_epochs;
+			let requirement_three: bool = min_required_peer_accountant_epochs >= min_required_peer_consensus_submit_epochs;
 			
 			if !requirement_one || !requirement_two || !requirement_three {
 				log::error!("Build error code 001, check `fn build`");
@@ -3082,7 +3659,7 @@ pub mod pallet {
 					log::error!("MinRequiredPeerConsensusSubmitEpochs is not greater than MinRequiredPeerConsensusInclusionEpochs");
 				}
 				if !(requirement_three) {
-					log::error!("MinRequiredPeerConsensusDishonestyEpochs is not greater than or equal to MinRequiredPeerConsensusSubmitEpochs");
+					log::error!("MinRequiredPeerAccountantEpochs is not greater than or equal to MinRequiredPeerConsensusSubmitEpochs");
 				}
 			}
 
@@ -3245,6 +3822,20 @@ impl<T: Config, AccountId> ModelVote<AccountId> for Pallet<T> {
 	fn is_submittable_model_peer_account(account_id: AccountId) -> bool {
 		true
 	}
+	fn is_model_initialized(id: u32) -> bool {
+		let model_data = ModelsData::<T>::get(id).unwrap();
+		let model_initialized = model_data.initialized;
+
+		let epoch_length: u64 = EpochLength::<T>::get();
+		let min_required_model_consensus_submit_epochs = MinRequiredModelConsensusSubmitEpochs::<T>::get();
+		let block: u64 = Self::get_current_block_as_u64();
+
+		block >= Self::get_eligible_epoch_block(
+			epoch_length, 
+			model_initialized, 
+			min_required_model_consensus_submit_epochs
+		)
+	}
 }
 
 pub trait ModelVote<AccountId> {
@@ -3261,6 +3852,7 @@ pub trait ModelVote<AccountId> {
 	fn get_max_model_peers() -> u32;
 	fn get_min_stake_balance() -> u128;
 	fn is_submittable_model_peer_account(account_id: AccountId) -> bool;
+	fn is_model_initialized(id: u32) -> bool;
 }
 
 // Admin logic

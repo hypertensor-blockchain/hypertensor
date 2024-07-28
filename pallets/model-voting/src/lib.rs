@@ -255,13 +255,13 @@ pub mod pallet {
       abstain: 0,
     }
 	}
-  #[pallet::type_value]
-	pub fn DefaultActivateVotes<T: Config>() -> ActivateVotesParams {
-		return ActivateVotesParams {
-      yay: 0,
-      nay: 0,
-    }
-	}
+  // #[pallet::type_value]
+	// pub fn DefaultActivateVotes<T: Config>() -> ActivateVotesParams {
+	// 	return ActivateVotesParams {
+  //     yay: 0,
+  //     nay: 0,
+  //   }
+	// }
   // #[pallet::type_value]
 	// pub fn DefaultDeactivatePropsParams<T: Config>() -> DeactivatePropsParams<T::AccountId> {
 	// 	return DeactivatePropsParams {
@@ -339,16 +339,17 @@ pub mod pallet {
     }
   }
 
-	#[pallet::storage]
-	#[pallet::getter(fn activate_props)]
-	pub type ActivateProps<T: Config> =
-		StorageMap<_, Blake2_128Concat, PropIndex, ActivatePropsParams<T::AccountId>, ValueQuery, DefaultActivatePropsParams<T>>;
+	// #[pallet::storage]
+	// #[pallet::getter(fn activate_props)]
+	// pub type ActivateProps<T: Config> =
+	// 	StorageMap<_, Blake2_128Concat, PropIndex, ActivatePropsParams<T::AccountId>, ValueQuery, DefaultActivatePropsParams<T>>;
 
   #[pallet::storage]
   #[pallet::getter(fn props)]
   pub type Proposals<T: Config> =
     StorageMap<_, Blake2_128Concat, PropIndex, PropsParams<T::AccountId>, ValueQuery, DefaultPropsParams<T>>;
   
+  // Track active proposals to ensure that we don't increase past the max proposals
   #[pallet::storage]
   #[pallet::getter(fn active_proposals)]
 	pub type ActiveProposals<T> = StorageValue<_, u32, ValueQuery>;
@@ -370,26 +371,26 @@ pub mod pallet {
     ValueQuery,
   >;
 
-  #[pallet::storage]
-  pub type ActivateVotes<T: Config> =
-    StorageMap<_, Blake2_128Concat, PropIndex, ActivateVotesParams, ValueQuery, DefaultActivateVotes<T>>;
+  // #[pallet::storage]
+  // pub type ActivateVotes<T: Config> =
+  //   StorageMap<_, Blake2_128Concat, PropIndex, ActivateVotesParams, ValueQuery, DefaultActivateVotes<T>>;
   
-  #[pallet::storage]
-	#[pallet::getter(fn activate_prop_count)]
-	pub type ActivatePropCount<T> = StorageValue<_, PropIndex, ValueQuery>;
+  // #[pallet::storage]
+	// #[pallet::getter(fn activate_prop_count)]
+	// pub type ActivatePropCount<T> = StorageValue<_, PropIndex, ValueQuery>;
 
   #[pallet::storage]
 	#[pallet::getter(fn prop_count)]
 	pub type PropCount<T> = StorageValue<_, PropIndex, ValueQuery>;
 
-  #[pallet::storage]
-	#[pallet::getter(fn deactivate_props)]
-	pub type DeactivateProps<T: Config> =
-		StorageMap<_, Blake2_128Concat, PropIndex, ActivatePropsParams<T::AccountId>, ValueQuery, DefaultActivatePropsParams<T>>;
+  // #[pallet::storage]
+	// #[pallet::getter(fn deactivate_props)]
+	// pub type DeactivateProps<T: Config> =
+	// 	StorageMap<_, Blake2_128Concat, PropIndex, ActivatePropsParams<T::AccountId>, ValueQuery, DefaultActivatePropsParams<T>>;
 
-  #[pallet::storage]
-	#[pallet::getter(fn deactivate_prop_count)]
-	pub type DeactivatePropCount<T> = StorageValue<_, PropIndex, ValueQuery>;
+  // #[pallet::storage]
+	// #[pallet::getter(fn deactivate_prop_count)]
+	// pub type DeactivatePropCount<T> = StorageValue<_, PropIndex, ValueQuery>;
 
   #[pallet::storage]
 	pub type PropsPathStatus<T: Config> =
@@ -783,9 +784,16 @@ impl<T: Config> Pallet<T> {
 
   fn try_propose_deactivate(account_id: T::AccountId, path: Vec<u8>) -> DispatchResult {
     // --- Ensure model ID exists to be removed
+    let model_id = T::ModelVote::get_model_id_by_path(path.clone());
     ensure!(
-      T::ModelVote::get_model_id_by_path(path.clone()) != 0,
+      model_id != 0,
       Error::<T>::ModelIdNotExists
+    );
+
+    // --- Ensure model has had enough time to initialize
+    ensure!(
+      T::ModelVote::is_model_initialized(model_id),
+      Error::<T>::ProposalInvalid
     );
 
     // --- Ensure proposal on model path not already in progress

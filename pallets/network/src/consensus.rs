@@ -8,7 +8,7 @@ impl<T: Config> Pallet<T> {
     let maximum_outlier_delta_percent: u8 = MaximumOutlierDeltaPercent::<T>::get();
     let model_peer_consensus_submit_percent_requirement: u128 = ModelPeerConsensusSubmitPercentRequirement::<T>::get();
     let max_model_consensus_epoch_errors: u32 = MaxModelConsensusEpochsErrors::<T>::get();
-    let consensus_blocks_interval: u64 = ConsensusBlocksInterval::<T>::get();
+    let epoch_length: u64 = EpochLength::<T>::get();
     let min_required_model_consensus_submit_epochs = MinRequiredModelConsensusSubmitEpochs::<T>::get();
     let model_consensus_unconfirmed_threshold = ModelConsensusUnconfirmedThreshold::<T>::get();
     let model_peer_seq_consensus_sent_threshold = ModelPeerConsecutiveConsensusSentThreshold::<T>::get();
@@ -26,7 +26,7 @@ impl<T: Config> Pallet<T> {
       // If model can't yet form consensus, continue
       //
       // We use this here instead of when initializing the model or peer in order to keep the required time
-      // universal in the case models or peers are added before an update to the ConsensusBlocksInterval
+      // universal in the case models or peers are added before an update to the EpochLength
       //
       // This also should give time for peer to come in
       // Models should already be hosted before being voted in, therefor by the time a model can enter into
@@ -38,7 +38,7 @@ impl<T: Config> Pallet<T> {
       //
       // e.g. Can't form consensus if the following parameters
       //			• model initialized		0
-      //			• interval 						20
+      //			• epoch_length 			  20
       //			• epochs							10
       //			• current block 			200
       //	eligible block is 200
@@ -50,7 +50,7 @@ impl<T: Config> Pallet<T> {
       //
       // e.g. Can form consensus if the following parameters
       //			• model initialized		0
-      //			• interval 						20
+      //			• epoch_length 			  20
       //			• epochs							10
       //			• current block 			220
       //	eligible block is 200
@@ -59,7 +59,7 @@ impl<T: Config> Pallet<T> {
       //	220 is not less than or equal to 200, form consensus
       //
       if block <= Self::get_eligible_epoch_block(
-        consensus_blocks_interval, 
+        epoch_length, 
         model_initialized, 
         min_required_model_consensus_submit_epochs
       ) {
@@ -102,10 +102,10 @@ impl<T: Config> Pallet<T> {
       let model_peer_submits = ModelTotalConsensusSubmits::<T>::get(model_id.clone());
 
       // Count of eligible to have submitted consensus data model peers on current epochs data
-      let total_model_peers: u32 = Self::get_prev_epoch_total_submittable_model_peers(
+      let total_model_peers: u32 = Self::get_prev_epoch_total_eligible_model_peers_count(
         model_id.clone(),
         block,
-        consensus_blocks_interval,
+        epoch_length,
         min_required_peer_consensus_submit_epochs
       );
 
@@ -399,7 +399,7 @@ impl<T: Config> Pallet<T> {
         //
         // e.g. Couldn't submit consensus data if the following parameters
         //			• peer initialized		0
-        //			• interval 						20
+        //			• epoch_length 						20
         //			• epochs							10
         //			• current block 			200
         //	• eligible block is 200
@@ -409,7 +409,7 @@ impl<T: Config> Pallet<T> {
         //
         // e.g. Could have submitted consensus data if the following parameters
         //			• peer initialized		0
-        //			• interval 						20
+        //			• epoch_length 						20
         //			• epochs							10
         //			• current block 			220
         //	• eligible block is 200
@@ -418,7 +418,7 @@ impl<T: Config> Pallet<T> {
         //	• 220 is greater than 200, could have submitted data
         //
         let can_submit: bool = block > Self::get_eligible_epoch_block(
-          consensus_blocks_interval, 
+          epoch_length, 
           peer_initialized, 
           min_required_peer_consensus_submit_epochs
         );
@@ -571,4 +571,14 @@ impl<T: Config> Pallet<T> {
     let _ = ModelConsensusEpochUnconfirmedCount::<T>::remove(model_id.clone());
     let _ = ModelConsensusEpochSubmitCount::<T>::remove(model_id.clone());
   }
+
+  // pub fn get_accountants(model_id: u32) -> Vec<PeerId> {
+  //   // This is a placeholder function for retrieving accountants for a model
+  //   // You would need to implement this based on your specific use case
+  //   // For example, you might store accountant IDs in a separate storage map
+  //   // and retrieve them using `AccountId` as the key
+  //   //
+  //   // For now, we just return a hardcoded list of accountant IDs
+  //   vec![PeerId::from([1, 2, 3, 4, 5]), PeerId::from([6, 7, 8, 9, 10])]
+  // }
 }

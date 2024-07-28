@@ -25,7 +25,7 @@ impl<T: Config> Pallet<T> {
     }
 
     let block: u64 = Self::get_current_block_as_u64();
-    let interval: u64 = ConsensusBlocksInterval::<T>::get();
+    let epoch_length: u64 = EpochLength::<T>::get();
     let min_required_epochs: u64 = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
 
     let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
@@ -42,7 +42,7 @@ impl<T: Config> Pallet<T> {
       let initialized: u64 = model_peer.clone().initialized;
 
       let do_include: bool = block >= Self::get_eligible_epoch_block(
-        interval, 
+        epoch_length, 
         initialized, 
         min_required_epochs
       );
@@ -64,7 +64,7 @@ impl<T: Config> Pallet<T> {
     }
 
     let block: u64 = Self::get_current_block_as_u64();
-    let interval: u64 = ConsensusBlocksInterval::<T>::get();
+    let epoch_length: u64 = EpochLength::<T>::get();
     let min_required_epochs: u64 = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
 
     let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
@@ -81,7 +81,7 @@ impl<T: Config> Pallet<T> {
       let initialized: u64 = model_peer.clone().initialized;
 
       let do_include: bool = block >= Self::get_eligible_epoch_block(
-        interval, 
+        epoch_length, 
         initialized, 
         min_required_epochs
       );

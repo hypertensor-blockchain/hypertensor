@@ -33,7 +33,7 @@ use frame_support::dispatch::Vec;
 use sp_core::OpaquePeerId as PeerId;
 use scale_info::prelude::vec;
 use scale_info::prelude::format;
-use crate::{ModelPaths, ConsensusBlocksInterval, MinRequiredUnstakeEpochs, TotalStake};
+use crate::{ModelPaths, EpochLength, MinRequiredUnstakeEpochs, TotalStake};
 
 const PERCENTAGE_FACTOR: u128 = 10000;
 const SEED: u32 = 0;
@@ -61,11 +61,11 @@ fn make_consensus_data_submittable<T: Config>() {
   // increase blocks
 	let current_block_number = get_current_block_as_u64::<T>();
   let model_peer_removal_percentage = RemoveModelPeerEpochPercentage::<T>::get();
-  let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+  let epoch_length = EpochLength::<T>::get();
 
-  let block_can_remove_peer = consensus_blocks_interval as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR;
+  let block_can_remove_peer = epoch_length as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR;
 
-  let max_remove_model_peer_block = block_can_remove_peer as u64 + (current_block_number - (current_block_number % consensus_blocks_interval));
+  let max_remove_model_peer_block = block_can_remove_peer as u64 + (current_block_number - (current_block_number % epoch_length));
 
   if current_block_number < max_remove_model_peer_block {
 		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(max_remove_model_peer_block + 1));
@@ -75,9 +75,9 @@ fn make_consensus_data_submittable<T: Config>() {
 fn make_model_peer_consensus_data_submittable<T: Config>() {
   // increase blocks
 	let current_block_number = get_current_block_as_u64::<T>();
-  let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+  let epoch_length = EpochLength::<T>::get();
   let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
-	let required_block = current_block_number + consensus_blocks_interval * min_required_peer_consensus_submit_epochs;
+	let required_block = current_block_number + epoch_length * min_required_peer_consensus_submit_epochs;
 	frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(required_block));
 
 	make_consensus_data_submittable::<T>();
@@ -87,26 +87,26 @@ fn make_model_peer_removable<T: Config>() {
   // increase blocks
   let current_block_number = get_current_block_as_u64::<T>();
   let model_peer_removal_percentage = RemoveModelPeerEpochPercentage::<T>::get();
-  let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+  let epoch_length = EpochLength::<T>::get();
 
-  let block_span_can_remove_peer = (consensus_blocks_interval as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR) as u64;
+  let block_span_can_remove_peer = (epoch_length as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR) as u64;
 
-  let start_removal_block = (CONSENSUS_STEPS + (current_block_number - (current_block_number % consensus_blocks_interval))) as u64;
+  let start_removal_block = (CONSENSUS_STEPS + (current_block_number - (current_block_number % epoch_length))) as u64;
 
-  let end_removal_block = block_span_can_remove_peer + (current_block_number - (current_block_number % consensus_blocks_interval));
+  let end_removal_block = block_span_can_remove_peer + (current_block_number - (current_block_number % epoch_length));
   
   if current_block_number < start_removal_block {
 		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(start_removal_block));
   } else if current_block_number > end_removal_block {
-		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(start_removal_block + consensus_blocks_interval));
+		frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(start_removal_block + epoch_length));
   }
 }
 
 fn make_model_initialized<T: Config>() {
 	let current_block_number = get_current_block_as_u64::<T>();
-	let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+	let epoch_length = EpochLength::<T>::get();
 	let min_required_model_consensus_submit_epochs: u64 = Network::<T>::min_required_model_consensus_submit_epochs();
-	frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(current_block_number + consensus_blocks_interval * min_required_model_consensus_submit_epochs));
+	frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(current_block_number + epoch_length * min_required_model_consensus_submit_epochs));
 }
 
 fn peer(id: u8) -> PeerId {
@@ -372,9 +372,9 @@ benchmarks! {
 		
 		let block = frame_system::Pallet::<T>::block_number();
 
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+		let epoch_length = EpochLength::<T>::get();
     let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<T>::get();
-		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_unstake_epochs));
+		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(epoch_length * min_required_unstake_epochs));
 
 		let remove_stake_amount: u128 = 10;
 		let expected_stake_amount: u128 = stake_amount - remove_stake_amount;
@@ -401,7 +401,7 @@ benchmarks! {
 	}
 
 	submit_consensus_data {
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+		let epoch_length = EpochLength::<T>::get();
 
 		// add model
 		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
@@ -433,7 +433,7 @@ benchmarks! {
 
 		// let block = frame_system::Pallet::<T>::block_number();
 		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
-		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_peer_consensus_submit_epochs));
+		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(epoch_length * min_required_peer_consensus_submit_epochs));
 
 		// build consensus
 		let model_peer_data = model_peer_data::<T>(0, n_peers);
@@ -459,7 +459,7 @@ benchmarks! {
 	}
 
 	unconfirm_consensus_data {
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+		let epoch_length = EpochLength::<T>::get();
 
 		// add model
 		let model_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
@@ -507,7 +507,7 @@ benchmarks! {
 		// params from genesis
 		let total_models = Network::<T>::total_models();
 		let max_models = Network::<T>::max_models();
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+		let epoch_length = EpochLength::<T>::get();
 
 		// add model
 		let m_models: u32 = max_models;
@@ -543,7 +543,7 @@ benchmarks! {
 		make_model_peer_consensus_data_submittable::<T>();
 		// let block = frame_system::Pallet::<T>::block_number();
 		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
-		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_peer_consensus_submit_epochs));
+		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(epoch_length * min_required_peer_consensus_submit_epochs));
 
 		// build consensus
 		let model_peer_data = model_peer_data::<T>(0, n_peers);
@@ -567,10 +567,10 @@ benchmarks! {
 			}
     }
 
-		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
+		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
-      consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+      epoch_length + (block - (block % epoch_length))
     );    
 	}: form_consensus(RawOrigin::Signed(caller.clone()))
 	verify {
@@ -787,7 +787,7 @@ benchmarks! {
 		StakeVaultBalance::<T>::mutate(|n: &mut u128| *n += 10000000000000000000);
 		let total_models = Network::<T>::total_models();
 		let max_models = Network::<T>::max_models();
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+		let epoch_length = EpochLength::<T>::get();
 
 		// add models
 		let m_models: u32 = max_models;
@@ -823,7 +823,7 @@ benchmarks! {
 		make_model_peer_consensus_data_submittable::<T>();
 		// let block = frame_system::Pallet::<T>::block_number();
 		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
-		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_peer_consensus_submit_epochs));
+		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(epoch_length * min_required_peer_consensus_submit_epochs));
 
 		// build consensus
 		let model_peer_data = model_peer_data::<T>(0, n_peers);
@@ -852,10 +852,10 @@ benchmarks! {
 			);	
     }
 
-		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
+		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
-      consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+      epoch_length + (block - (block % epoch_length))
     );    
 
 		// call form_consensus
@@ -864,7 +864,7 @@ benchmarks! {
 		// Set to correct generate emissions block
 		let block = frame_system::Pallet::<T>::block_number();
 		frame_system::Pallet::<T>::set_block_number(
-			consensus_blocks_interval + (block - (block % consensus_blocks_interval) + u64_to_block::<T>(1))
+			epoch_length + (block - (block % epoch_length) + u64_to_block::<T>(1))
 		);    
 	}: do_generate_emissions(RawOrigin::Signed(caller.clone()))
 	verify {
@@ -902,7 +902,7 @@ benchmarks! {
 		let block = frame_system::Pallet::<T>::block_number();
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
 		
-		let consensus_blocks_interval = ConsensusBlocksInterval::<T>::get();
+		let epoch_length = EpochLength::<T>::get();
 
 		// add model peers
 		let n_peers: u8 = (Network::<T>::max_model_peers()) as u8;
@@ -1000,7 +1000,7 @@ benchmarks! {
 		make_model_peer_consensus_data_submittable::<T>();
 		// let block = frame_system::Pallet::<T>::block_number();
 		// let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
-		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(consensus_blocks_interval * min_required_peer_consensus_submit_epochs));
+		// frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(epoch_length * min_required_peer_consensus_submit_epochs));
 
 		// build consensus
 		let model_peer_data = model_peer_data::<T>(0, n_peers);
@@ -1029,10 +1029,10 @@ benchmarks! {
 			);	
     }
 
-		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
+		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
-      consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+      epoch_length + (block - (block % epoch_length))
     );    
 
 		// call form_consensus
@@ -1040,7 +1040,7 @@ benchmarks! {
 
 		let block = frame_system::Pallet::<T>::block_number();
 		frame_system::Pallet::<T>::set_block_number(
-			consensus_blocks_interval + (block - (block % consensus_blocks_interval) + u64_to_block::<T>(1))
+			epoch_length + (block - (block % epoch_length) + u64_to_block::<T>(1))
 		);
 	}: do_generate_emissions(RawOrigin::Signed(caller.clone()))
 	verify {
@@ -1069,10 +1069,10 @@ benchmarks! {
 		let caller = funded_account::<T>("caller", 0);
 		whitelist_account!(caller);
 
-		let consensus_blocks_interval = u64_to_block::<T>(ConsensusBlocksInterval::<T>::get());
+		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
-      consensus_blocks_interval + (block - (block % consensus_blocks_interval))
+      epoch_length + (block - (block % epoch_length))
     );
 	}: form_consensus_no_consensus_weight_test(RawOrigin::Signed(caller.clone()))
 	verify {

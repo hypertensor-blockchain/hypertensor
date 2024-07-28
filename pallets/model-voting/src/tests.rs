@@ -312,6 +312,11 @@ fn build_propose_deactivate(path: Vec<u8>, start: u32, end: u32, deposit_amount:
 
   let model_peers = build_model_peers(start, end, deposit_amount);
 
+  let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
+  let epoch_length = pallet_network::EpochLength::<Test>::get();
+
+  System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
+
   assert_ok!(
     ModelVoting::propose(
       RuntimeOrigin::signed(account(0)),
@@ -324,7 +329,7 @@ fn build_propose_deactivate(path: Vec<u8>, start: u32, end: u32, deposit_amount:
 }
 
 fn make_model_peer_included() {
-  let consensus_blocks_interval = pallet_network::ConsensusBlocksInterval::<Test>::get();
+  let consensus_blocks_interval = pallet_network::EpochLength::<Test>::get();
   let min_required_consensus_inclusion_epochs = pallet_network::MinRequiredPeerConsensusInclusionEpochs::<Test>::get();
   System::set_block_number(System::block_number() + consensus_blocks_interval * min_required_consensus_inclusion_epochs + 1000);
 }
@@ -1110,6 +1115,11 @@ fn test_propose_deactivate() {
     build_existing_model(0, min_model_peers);
     let prop_count = PropCount::<Test>::get();
 
+    let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
+    let epoch_length = pallet_network::EpochLength::<Test>::get();
+
+    System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
+
     assert_ok!(
       ModelVoting::propose(
         RuntimeOrigin::signed(account(0)),
@@ -1133,6 +1143,11 @@ fn test_propose_deactivate_peers_min_length_err() {
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     let model_peers = build_model_peers(0, min_model_peers, min_stake);
+
+    let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
+    let epoch_length = pallet_network::EpochLength::<Test>::get();
+
+    System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
     assert_err!(
       ModelVoting::propose(
@@ -1168,6 +1183,11 @@ fn test_propose_deactivate_already_active_err() {
   new_test_ext().execute_with(|| {
     let min_model_peers = pallet_network::MinModelPeers::<Test>::get();
     build_existing_model(0, min_model_peers);
+
+    let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
+    let epoch_length = pallet_network::EpochLength::<Test>::get();
+
+    System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
     assert_ok!(
       ModelVoting::propose(

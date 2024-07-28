@@ -216,9 +216,9 @@ impl<T: Config> Pallet<T> {
       Error::<T>::InvalidPeerConsensusDishonestyEpochs
     );
 
-    MinRequiredPeerConsensusDishonestyEpochs::<T>::set(value);
+    MinRequiredPeerAccountantEpochs::<T>::set(value);
 
-    Self::deposit_event(Event::SetMinRequiredPeerConsensusDishonestyEpochs(value));
+    Self::deposit_event(Event::SetMinRequiredPeerAccountantEpochs(value));
 
     Ok(())
   }
@@ -261,12 +261,12 @@ impl<T: Config> Pallet<T> {
     // Ensure a minimum of 1000 blocks per consensus epoch
     ensure!(
       value >= 1000,
-      Error::<T>::InvalidConsensusBlocksInterval
+      Error::<T>::InvalidEpochLengthsInterval
     );
 
-    ConsensusBlocksInterval::<T>::set(value);
+    EpochLength::<T>::set(value);
 
-    Self::deposit_event(Event::SetConsensusBlocksInterval(value));
+    Self::deposit_event(Event::SetEpochLengthsInterval(value));
 
     Ok(())
   }

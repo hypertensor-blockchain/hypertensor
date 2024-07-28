@@ -21,6 +21,7 @@ lite-json = { version = "0.2.0", default-features = false }
 num-traits = { version = "0.2.18", default-features = false }
 
 no-std-net = "0.6.0"
+rand = { version = "0.8.5", features = ["small_rng"], default-features = false }
 
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 frame-benchmarking = { version = "4.0.0-dev", default-features = false, optional = true, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }

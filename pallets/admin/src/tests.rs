@@ -386,7 +386,7 @@ fn test_set_consensus_blocks_interval() {
         RuntimeOrigin::root(),
         1,
       ),
-      pallet_network::Error::<Test>::InvalidConsensusBlocksInterval
+      pallet_network::Error::<Test>::InvalidEpochLengthsInterval
     );
 
     assert_ok!(
@@ -396,7 +396,7 @@ fn test_set_consensus_blocks_interval() {
       )
     );
 
-    let value = pallet_network::ConsensusBlocksInterval::<Test>::get();
+    let value = pallet_network::EpochLength::<Test>::get();
     assert_eq!(value, 1000);
   })
 }
