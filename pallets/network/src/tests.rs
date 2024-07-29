@@ -37,9 +37,9 @@ use crate::{
   ModelTotalConsensusSubmits, PeerAgainstConsensusRemovalThreshold,
   ModelConsensusEpochUnconfirmedCount, ModelsInConsensus,
   MaxModelConsensusUnconfirmedConsecutiveEpochs, ModelConsensusUnconfirmedConsecutiveEpochsCount,
-  DishonestyVotingPeriod, ModelPeerDishonestyVote, MinRequiredPeerAccountantEpochs,
+  VotingPeriod, ModelPeerDishonestyVote, MinRequiredPeerAccountantEpochs,
   AccountModelDelegateStakeShares,TotalModelDelegateStakeShares, TotalModelDelegateStakeBalance,
-  MinRequiredDelegateUnstakeEpochs, TotalModels, CurrentAccountant2, AccountantDataCount,
+  MinRequiredDelegateUnstakeEpochs, TotalModels, CurrentAccountant2, AccountantDataCount, PropsType,
   AccountantDataPeerParams
 };
 use frame_support::weights::Pays;
@@ -3901,7 +3901,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -3949,7 +3949,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -3995,7 +3995,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4042,7 +4042,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4113,7 +4113,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4151,7 +4151,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4207,7 +4207,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4279,7 +4279,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //   new_test_ext().execute_with(|| {
 //     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4366,7 +4366,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4424,7 +4424,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4471,7 +4471,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4531,7 +4531,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4597,7 +4597,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4656,7 +4656,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -4716,7 +4716,7 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //       model_id.clone(),
 //     );
 
-//     let dishonesty_voting_period = DishonestyVotingPeriod::<Test>::get();
+//     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
@@ -5140,12 +5140,89 @@ fn test_choose_accountants() {
 }
 
 #[test]
-fn test_generate_multi_node_account() {
+fn test_propose_dishonesty() {
   new_test_ext().execute_with(|| {
-    let account_id = Network::generate_multi_node_account(account(0));
-    log::error!("generate_multi_node_account account(0): {:?}", account(0));
+    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let n_peers: u32 = Network::max_model_peers();
+    build_model(model_path.clone());
 
-    log::error!("generate_multi_node_account account_id: {:?}", account_id);
-    log::error!("generate_multi_node_account account_id: {:?}", account_id.unwrap());
+    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+
+    let deposit_amount: u128 = 1000000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let mut amount_staked: u128 = 0;
+
+    System::set_block_number(System::block_number() + CONSENSUS_STEPS);
+
+    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+
+    make_model_peer_dishonesty_consensus_proposable();
+
+    Network::check_and_choose_accountant();
+
+    let mut current_accountants = CurrentAccountant2::<Test>::get(model_id.clone());
+    let accountant = current_accountants.first_key_value().unwrap();
+    let accountant_data_count = AccountantDataCount::<Test>::get(model_id.clone());
+
+    let mut accountant_data_peers: Vec<AccountantDataPeerParams> = Vec::new();
+
+    for n in 0..n_peers {
+      accountant_data_peers.push(
+        AccountantDataPeerParams {
+          peer_id: peer(n),
+          data: BoundedVec::new()
+        }
+      )  
+    }
+
+    assert_ok!(
+      Network::submit_accountant_data(
+        RuntimeOrigin::signed(accountant.0.clone()), 
+        model_id.clone(),
+        accountant_data_peers.clone(),
+      )  
+    );
+
+    let non_empty_data: Vec<u8> = "__data__".into();
+
+    // propose_dishonesty
+    assert_ok!(
+      Network::propose_dishonesty(
+        RuntimeOrigin::signed(account(1)), 
+        model_id.clone(),
+        peer(0),
+        PropsType::DishonestAccountant,
+        non_empty_data,
+        Some(1),
+    )
+    );
   });
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// #[test]
+// fn test_generate_multi_node_account() {
+//   new_test_ext().execute_with(|| {
+//     let account_id = Network::generate_multi_node_account(account(0));
+//     log::error!("generate_multi_node_account account(0): {:?}", account(0));
+
+//     log::error!("generate_multi_node_account account_id: {:?}", account_id);
+//     log::error!("generate_multi_node_account account_id: {:?}", account_id.unwrap());
+//   });
+// }

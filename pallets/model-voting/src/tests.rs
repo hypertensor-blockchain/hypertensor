@@ -315,6 +315,10 @@ fn build_propose_deactivate(path: Vec<u8>, start: u32, end: u32, deposit_amount:
   let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
   let epoch_length = pallet_network::EpochLength::<Test>::get();
 
+  let model_path: Vec<u8> = DEFAULT_EXISTING_MODEL_PATH.into();
+  let model_id = pallet_network::ModelPaths::<Test>::get(model_path.clone()).unwrap();
+  pallet_network::ModelConsensusEpochsErrors::<Test>::insert(model_id, 1);
+
   System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
   assert_ok!(
@@ -1118,6 +1122,10 @@ fn test_propose_deactivate() {
     let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
     let epoch_length = pallet_network::EpochLength::<Test>::get();
 
+    let model_path: Vec<u8> = DEFAULT_EXISTING_MODEL_PATH.into();
+    let model_id = pallet_network::ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    pallet_network::ModelConsensusEpochsErrors::<Test>::insert(model_id, 1);
+  
     System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
     assert_ok!(
@@ -1187,6 +1195,10 @@ fn test_propose_deactivate_already_active_err() {
     let submit_epochs = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
     let epoch_length = pallet_network::EpochLength::<Test>::get();
 
+    let model_path: Vec<u8> = DEFAULT_EXISTING_MODEL_PATH.into();
+    let model_id = pallet_network::ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    pallet_network::ModelConsensusEpochsErrors::<Test>::insert(model_id, 1);
+  
     System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
     assert_ok!(

@@ -23,11 +23,16 @@ impl<T: Config> Pallet<T> {
     peer_id: PeerId,
     proposal_type: PropsType,
     data: Vec<u8>,
-    account_data_id: u32,
+    accountant_data_id: Option<u32>,
   ) -> DispatchResult {
     ensure!(
       proposal_type != PropsType::None,
       Error::<T>::PropsTypeInvalid
+    );
+
+    ensure!(
+      data.len() > 0,
+      Error::<T>::DataEmpty
     );
 
     // --- Ensure model exists
@@ -99,12 +104,17 @@ impl<T: Config> Pallet<T> {
     if proposal_type == PropsType::DishonestAccountant {
       // --- Ensure AccountantData exists
       ensure!(
-        AccountantData::<T>::contains_key(model_id.clone(), account_data_id),
+        accountant_data_id != None,
+        Error::<T>::InvalidAccountantDataId
+      );
+
+      ensure!(
+        AccountantData::<T>::contains_key(model_id.clone(), accountant_data_id.unwrap()),
         Error::<T>::InvalidAccountantDataId
       );
 
       // --- Ensure required time period to challenge hasn't passed
-      let accountant_data: AccountantDataParams<T::AccountId> = AccountantData::<T>::get(model_id.clone(), account_data_id);
+      let accountant_data: AccountantDataParams<T::AccountId> = AccountantData::<T>::get(model_id.clone(), accountant_data_id.unwrap());
       let accountant_data_block: u64 = accountant_data.block;
       let accountant_data_challenge_period: u64 = AccountantDataChallengePeriod::<T>::get();
       let accountant_data_max_block: u64 = accountant_data_block + accountant_data_challenge_period;
@@ -139,7 +149,6 @@ impl<T: Config> Pallet<T> {
         params.account_id = model_peer_account.clone().1;
         params.peer_id = peer_id.clone();
         params.bid = proposal_bid_amout;
-        // params.challenged = false;
         params.total_votes = 1;
         params.votes = VotesParams {
           yay: 1,
@@ -152,9 +161,9 @@ impl<T: Config> Pallet<T> {
         params.challenge_block = 0;
         params.data = data;
         if proposal_type == PropsType::DishonestAccountant {
-          params.accountant_data_id = account_data_id;
+          params.accountant_data_id = Some(accountant_data_id.unwrap());
         } else {
-          params.accountant_data_id = 0;
+          params.accountant_data_id = None;
         }
       }
     );
@@ -232,7 +241,6 @@ impl<T: Config> Pallet<T> {
       proposal_index,
       |params: &mut DishonestyProposalParams<T::AccountId>| {
         params.total_votes += 1;
-        // params.challenged = true;
         params.challenge_block = block;
         params.votes.nay += 1; // challenger automatically nays proposal
         params.voters.push(account_id.clone());
@@ -279,19 +287,19 @@ impl<T: Config> Pallet<T> {
       Error::<T>::PeerAccountantEpochNotReached
     );
     
-    let challenged_block: u64 = proposal.challenge_block;
+    let challenge_block: u64 = proposal.challenge_block;
 
     // --- Ensure proposal has been challenged to initiate voting
     ensure!(
-      challenged_block != 0,
+      challenge_block != 0,
       Error::<T>::ProposalNotChallenged
     );
 
-    let voting_period = DishonestyVotingPeriod::<T>::get();
+    let voting_period = VotingPeriod::<T>::get();
 
     // --- Ensure voting period hasn't passed yet
     ensure!(
-      block <= challenged_block + voting_period,
+      block <= challenge_block + voting_period,
       Error::<T>::DishonestyVotingPeriodOver
     );
 
@@ -333,13 +341,13 @@ impl<T: Config> Pallet<T> {
     );
 
     let proposal = DishonestyProposal::<T>::get(model_id, proposal_index);
-    let challenged_block: u64 = proposal.challenge_block;
+    let challenge_block: u64 = proposal.challenge_block;
     let challenge_period = ChallengePeriod::<T>::get();
     let max_challenge_block = proposal.start_block + challenge_period;
     let block: u64 = Self::get_current_block_as_u64();
 
     // Challenge period has passed unchallenged
-    if block > max_challenge_block && challenged_block == 0 {
+    if block > max_challenge_block && challenge_block == 0 {
       // Proposal unchalleneged 
 
       // Return bid back to proposer
@@ -354,15 +362,15 @@ impl<T: Config> Pallet<T> {
 
     // --- Ensure proposal has been challenged to initiate voting
     ensure!(
-      challenged_block != 0,
+      challenge_block != 0,
       Error::<T>::ProposalNotChallenged
     );
 
-    let voting_period = DishonestyVotingPeriod::<T>::get();
+    let voting_period = VotingPeriod::<T>::get();
 
     // --- Ensure voting period has passed yet
     ensure!(
-      block > challenged_block + voting_period,
+      block > challenge_block + voting_period,
       Error::<T>::DishonestyVotingPeriodNotOver
     );
 
@@ -385,7 +393,7 @@ impl<T: Config> Pallet<T> {
     }
 
     // --- Check if proposal has reached quorum
-    let quorum: u128 = DishonestyProposalQuorum::<T>::get();
+    let quorum: u128 = ProposalQuorum::<T>::get();
     let percent_voting: u128 = Self::percent_div(proposal.total_votes as u128, total_accountants as u128);
 
     ensure!(
@@ -393,7 +401,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::QuorumNotReached
     );
 
-    let consensus_threshold: u128 = DishonestyProposalConsensusThreshold::<T>::get();
+    let consensus_threshold: u128 = ProposalConsensusThreshold::<T>::get();
 
     let yay_votes = proposal.votes.yay;
     let yay_votes_percentage: u128 = Self::percent_div(yay_votes as u128, proposal.total_votes as u128);
@@ -499,7 +507,7 @@ impl<T: Config> Pallet<T> {
     block: u64,
   ) -> bool {
     let challenge_period = ChallengePeriod::<T>::get();
-    let dishonesty_voting_period = DishonestyVotingPeriod::<T>::get();
+    let dishonesty_voting_period = VotingPeriod::<T>::get();
 
     let mut active_proposal: bool = false;
     for proposal in DishonestyProposal::<T>::iter_prefix_values(model_id) {

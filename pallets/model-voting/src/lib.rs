@@ -169,6 +169,7 @@ pub mod pallet {
     ModelVoteOutSuccess(u32, u64),
     SetPeerVotePremium(u128),
     SetQuorum(u128),
+    SetMajority(u128),
   }
 
 	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
@@ -277,6 +278,10 @@ pub mod pallet {
 	pub fn DefaultQuorum() -> u128 {
     // 10,000 * 1e18
 		10000000000000000000000
+	}
+  #[pallet::type_value]
+	pub fn DefaultMajority() -> u128 {
+		66
 	}
 
   #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
@@ -400,6 +405,9 @@ pub mod pallet {
   #[pallet::getter(fn quorum)]
   pub type Quorum<T> = StorageValue<_, u128, ValueQuery, DefaultQuorum>;
   
+  #[pallet::storage]
+  pub type Majority<T> = StorageValue<_, u128, ValueQuery>;
+
   #[pallet::storage]
   pub type PeerVotePremium<T> = StorageValue<_, u128, ValueQuery>;
 
@@ -742,6 +750,8 @@ impl<T: Config> Pallet<T> {
     // --- Ensure proposal on model path not already in progress
     let proposal_status = PropsPathStatus::<T>::get(path.clone());
 
+    // --- Ensure not active
+    // A proposal can only be active if the model is not already initialized into the blockchain
     ensure!(
       proposal_status != PropsStatus::Active,
       Error::<T>::ProposalInvalid
@@ -796,6 +806,12 @@ impl<T: Config> Pallet<T> {
       Error::<T>::ProposalInvalid
     );
 
+    // // --- Ensure model has errors to be removed
+    // ensure!(
+    //   T::ModelVote::get_total_model_errors(model_id) > 0,
+    //   Error::<T>::ProposalInvalid
+    // );
+    
     // --- Ensure proposal on model path not already in progress
     let proposal_status = PropsPathStatus::<T>::get(path.clone());
 
@@ -848,10 +864,6 @@ impl<T: Config> Pallet<T> {
 
     VotesBalance::<T>::mutate(proposal_index.clone(), account_id.clone(), |n| *n += vote_amount);
     // VotesBalance::<T>::mutate(proposal_index.clone(), account_id.clone(), |n| n.saturating_add(vote_amount));
-
-    log::error!("vote_amount {:?}", vote_amount);
-    log::error!("vote_power  {:?}", vote_power);
-    log::error!("vote        {:?}", vote);
 
     // --- Save vote
     if vote == VoteType::Yay {
@@ -1000,10 +1012,6 @@ impl<T: Config> Pallet<T> {
   fn balance_to_u128(
     input: BalanceOf<T>,
   ) -> u128 {
-    // input.saturated_into::<u128>()
-    // input as u128
-    // input.try_into().ok().expect("REASON")
-
     return match input.try_into() {
       Ok(_result) => _result,
       Err(_error) => 0,
@@ -1031,9 +1039,13 @@ impl<T: Config> AdminInterface for Pallet<T> {
 	fn set_quorum(value: u128) -> DispatchResult {
 		Self::set_quorum(value)
 	}
+  fn set_majority(value: u128) -> DispatchResult {
+		Self::set_majority(value)
+	}
 }
 
 pub trait AdminInterface {
 	fn set_peer_vote_premium(value: u128) -> DispatchResult;
   fn set_quorum(value: u128) -> DispatchResult;
+  fn set_majority(value: u128) -> DispatchResult;
 }

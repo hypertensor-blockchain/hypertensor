@@ -15,10 +15,6 @@
 
 use super::*;
 use frame_support::traits::Randomness;
-// use rand::{Rng, SeedableRng};
-// use rand::rngs::SmallRng;
-// use rand::RngCore;
-// use rand::{thread_rng, Rng};
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use rand::RngCore;

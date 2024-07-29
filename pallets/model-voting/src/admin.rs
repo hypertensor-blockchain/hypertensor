@@ -46,4 +46,20 @@ impl<T: Config> Pallet<T> {
 
     Ok(())
   }
+
+  pub fn set_majority(
+    value: u128,
+  ) -> DispatchResult {
+    ensure!(
+      value > 50 && value != Majority::<T>::get(), 
+      Error::<T>::InvalidQuorum
+    );
+
+    Majority::<T>::set(value);
+
+    Self::deposit_event(Event::SetMajority(value));
+
+    Ok(())
+  }
+
 }

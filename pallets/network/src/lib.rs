@@ -299,6 +299,7 @@ pub mod pallet {
 		NotAccountant,
 		InvalidAccountantDataId,
 		InvalidAccountantData,
+		DataEmpty,
 	}
 	
 	// Used for decoding API data - not in use in v1.0
@@ -398,7 +399,7 @@ pub mod pallet {
 		pub start_block: u64, // block of proposal
 		pub challenge_block: u64, // block of challenging proposal
 		pub data: Vec<u8>, // arbitrary data for subnets to use
-		pub accountant_data_id: u32, // if proposal type is dishonest account data, must submit accountant data ID
+		pub accountant_data_id: Option<u32>, // if proposal type is dishonest account data, must submit accountant data ID
 	}
 
 	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
@@ -521,7 +522,7 @@ pub mod pallet {
 			start_block: 0,
 			challenge_block: 0,
 			data: Vec::new(),
-			accountant_data_id: 0,
+			accountant_data_id: None,
 		};
 	}
 
@@ -1331,17 +1332,17 @@ pub mod pallet {
 	pub type ActiveDishonestyProposalsCount<T> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage] // Period in blocks for votes after challenge
-	pub type DishonestyVotingPeriod<T> = StorageValue<_, u64, ValueQuery, DefaultDishonestyVotingPeriod<T>>;
+	pub type VotingPeriod<T> = StorageValue<_, u64, ValueQuery, DefaultDishonestyVotingPeriod<T>>;
 
 	#[pallet::storage] // Period in blocks after proposal to challenge proposal
 	pub type ChallengePeriod<T> = StorageValue<_, u64, ValueQuery, DefaultChallengePeriod<T>>;
 
 	#[pallet::storage] // How many votes are needed
-	pub type DishonestyProposalQuorum<T> = StorageValue<_, u128, ValueQuery, DefaultDishonestyProposalQuorum<T>>;
+	pub type ProposalQuorum<T> = StorageValue<_, u128, ValueQuery, DefaultDishonestyProposalQuorum<T>>;
 
 	// Consensus required to pass proposal
 	#[pallet::storage]
-	pub type DishonestyProposalConsensusThreshold<T> = StorageValue<_, u128, ValueQuery, DefaultDishonestyProposalConsensusThreshold<T>>;
+	pub type ProposalConsensusThreshold<T> = StorageValue<_, u128, ValueQuery, DefaultDishonestyProposalConsensusThreshold<T>>;
 
 	#[pallet::storage] // model_id => proposal_id => proposal parameters
 	pub type DishonestyProposal<T: Config> = StorageDoubleMap<
@@ -2875,7 +2876,7 @@ pub mod pallet {
 				Err(()) => 0,
 			};
 
-			let dishonesty_voting_period: u64 = DishonestyVotingPeriod::<T>::get();
+			let dishonesty_voting_period: u64 = VotingPeriod::<T>::get();
 			let max_block = dishonesty_vote_start_block + dishonesty_voting_period;
 
 			// --- Ensure we can create a new proposal
@@ -3038,7 +3039,7 @@ pub mod pallet {
 			let start_block = model_peer_dishonesty_vote.start_block;
 
 			// --- Ensure voting is open
-			let dishonesty_voting_period: u64 = DishonestyVotingPeriod::<T>::get();
+			let dishonesty_voting_period: u64 = VotingPeriod::<T>::get();
 			let max_block = start_block + dishonesty_voting_period;
 
 			ensure!(
@@ -3277,116 +3278,18 @@ pub mod pallet {
 			peer_id: PeerId,
 			proposal_type: PropsType,
 			data: Vec<u8>,
-		) -> DispatchResult {
+			accountant_data_id: Option<u32>,
+	) -> DispatchResult {
 			let account_id: T::AccountId = ensure_signed(origin)?;
 
-      ensure!(
-				proposal_type != PropsType::None,
-				Error::<T>::PropsTypeInvalid
-			);
-
-			// --- Ensure model exists
-			ensure!(
-				ModelsData::<T>::contains_key(model_id.clone()),
-				Error::<T>::ModelNotExist
-			);
-
-			// --- Ensure account has peer
-			ensure!(
-				ModelPeersData::<T>::contains_key(model_id.clone(), account_id.clone()),
-				Error::<T>::ModelPeerNotExist
-			);
-			
-			// --- Ensure peer to propose as dishonest exists
-			let model_peer_account: (bool, T::AccountId) = match ModelPeerAccount::<T>::try_get(model_id.clone(), peer_id.clone()) {
-				Ok(_result) => (true, _result),
-				Err(()) => (false, T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap()),
-			};
-
-			ensure!(
-				model_peer_account.0,
-				Error::<T>::PeerIdNotExist
-			);
-
-			// Get proposal big amount and store in proposal in case this updates
-			let proposal_bid_amout: u128 = ProposalBidAmount::<T>::get();
-			let proposal_bid_amout_as_balance = Self::u128_to_balance(proposal_bid_amout);
-
-			let can_withdraw: bool = Self::can_remove_balance_from_coldkey_account(
-				&account_id,
-				proposal_bid_amout_as_balance.unwrap(),
-			);
-
-			ensure!(
-				can_withdraw,
-				Error::<T>::NotEnoughBalanceToBid
-			);
-
-			// --- Withdraw bid amount from proposer accounts
-			let _ = T::Currency::withdraw(
-				&account_id,
-				proposal_bid_amout_as_balance.unwrap(),
-				WithdrawReasons::except(WithdrawReasons::TRANSFER),
-				ExistenceRequirement::KeepAlive,
-			);
-
-			// --- Ensure the proposalled peer to be dishonest doesn't already have a proposal with the same type
-			let proposal_index = DishonestyProposalsCount::<T>::get();
-			
-			let block: u64 = Self::get_current_block_as_u64();
-
-			let challenge_period = ChallengePeriod::<T>::get();
-
-			// Self::account_has_active_proposal(
-			// 	model_id.clone(), 
-			// 	model_peer_account.1, 
-			// 	proposal_type,
-			// 	block,
-			// );
-
-			let mut voters: Vec<T::AccountId> = Vec::new();
-			voters.push(account_id.clone());
-
-			let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
-			let epoch_length: u64 = EpochLength::<T>::get();
-			let total_accountants = Self::get_total_accountants(
-				model_id.clone(),
-				block,
-				epoch_length,
-				min_required_peer_accountant_epochs
-			);
-
-			// --- Initiate proposal
-			DishonestyProposal::<T>::mutate(
-				model_id.clone(),
-				proposal_index,
-				|params: &mut DishonestyProposalParams<T::AccountId>| {
-					params.model_id = model_id.clone();
-					params.proposal_type = proposal_type;
-					params.proposer = account_id.clone();
-					params.total_accountants = total_accountants;
-					params.account_id = model_peer_account.1;
-					params.peer_id = peer_id.clone();
-					params.bid = proposal_bid_amout;
-					// params.challenged = false;
-					params.total_votes = 1;
-					params.votes = VotesParams {
-						yay: 1,
-						nay: 0,
-					};
-					params.voters = voters.clone();
-					params.yay_voters = voters.clone();
-					params.nay_voters = Vec::new();
-					params.start_block = block;
-					params.challenge_block = 0;
-					params.data = data;
-				}
-			);
-
-			// --- Increase proposal counter
-			DishonestyProposalsCount::<T>::put(proposal_index + 1);
-
-			Ok(())
+			Self::try_propose_dishonesty(
+				account_id,
+				model_id,
+				peer_id,
+				proposal_type,
+				data,
+				accountant_data_id,
+			)
 		}
 
 		#[pallet::call_index(27)]
@@ -3836,6 +3739,9 @@ impl<T: Config, AccountId> ModelVote<AccountId> for Pallet<T> {
 			min_required_model_consensus_submit_epochs
 		)
 	}
+	fn get_total_model_errors(id: u32) -> u32 {
+		ModelConsensusEpochsErrors::<T>::get(id)
+	}
 }
 
 pub trait ModelVote<AccountId> {
@@ -3853,6 +3759,7 @@ pub trait ModelVote<AccountId> {
 	fn get_min_stake_balance() -> u128;
 	fn is_submittable_model_peer_account(account_id: AccountId) -> bool;
 	fn is_model_initialized(id: u32) -> bool;
+	fn get_total_model_errors(id: u32) -> u32;
 }
 
 // Admin logic
