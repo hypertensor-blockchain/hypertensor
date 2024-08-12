@@ -41,7 +41,7 @@ use sp_runtime::Percent;
 use sp_runtime::{Saturating, Perbill};
 use sp_core::Get;
 use sp_core::crypto::KeyTypeId;
-use pallet_network::ModelVote;
+use pallet_network::SubnetVote;
 
 mod types;
 // mod utils;
@@ -80,7 +80,7 @@ pub mod pallet {
     #[pallet::constant]
 		type VotingPeriod: Get<BlockNumberFor<Self>>;
 
-    type ModelVote: ModelVote<Self::AccountId>; 
+    type SubnetVote: SubnetVote<Self::AccountId>; 
 
     type Currency: Currency<Self::AccountId> + LockableCurrency<Self::AccountId, Moment = BlockNumberFor<Self>> + Send + Sync;
 
@@ -90,9 +90,9 @@ pub mod pallet {
   	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-    /// Model path already exists
-		ModelPathExists,
-    /// Model proposal invalid - Can't be (ActivateVoting DectivateVoting Activated)
+    /// Subnet path already exists
+		SubnetPathExists,
+    /// Subnet proposal invalid - Can't be (ActivateVoting DectivateVoting Activated)
 		ProposalInvalid,
     /// Proposal doesn't exist 
     ProposalNotExist,
@@ -100,12 +100,12 @@ pub mod pallet {
     EnactmentPeriodInvalid,
     /// Proposal voting period closed
     VotingPeriodInvalid,
-    /// Model ID doens't exist
-    ModelIdNotExists,
+    /// Subnet ID doens't exist
+    SubnetIdNotExists,
 		/// Minimum required model peers not met
-		ModelPeersLengthInvalid,
+		SubnetNodesLengthInvalid,
     /// Minimum required model peers not met
-		NotEnoughModelInitializationBalance,
+		NotEnoughSubnetInitializationBalance,
     /// Minimum required model peers stake balance not in wallet
 		NotEnoughMinStakeBalance,
     /// Not enough balance to vote
@@ -120,14 +120,14 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    ModelVoteInInitialized(Vec<u8>, u64),
-    ModelVoteOutInitialized(u32, u64),
-    ModelVoteInSuccess(Vec<u8>, u64),
-    ModelVoteOutSuccess(u32, u64),
+    SubnetVoteInInitialized(Vec<u8>, u64),
+    SubnetVoteOutInitialized(u32, u64),
+    SubnetVoteInSuccess(Vec<u8>, u64),
+    SubnetVoteOutSuccess(u32, u64),
   }
 
 	#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-	pub struct ModelPeer<AccountId> {
+	pub struct SubnetNode<AccountId> {
     pub account_id: AccountId,
 		pub peer_id: PeerId,
 		pub ip: Vec<u8>,
@@ -137,7 +137,7 @@ pub mod pallet {
   #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct ActivatePropsParams<AccountId> {
     pub path: Vec<u8>,
-		pub model_peers: Vec<ModelPeer<AccountId>>,
+		pub subnet_nodes: Vec<SubnetNode<AccountId>>,
     pub max_block: u64,
 	}
 
@@ -146,14 +146,14 @@ pub mod pallet {
     pub proposal_status: PropsStatus,
     pub proposal_type: PropsType,
     pub path: Vec<u8>,
-		pub model_peers: Vec<ModelPeer<AccountId>>,
+		pub subnet_nodes: Vec<SubnetNode<AccountId>>,
     pub max_block: u64,
 	}
 
   // #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	// pub struct DeactivatePropsParams<AccountId> {
   //   pub path: Vec<u8>,
-	// 	pub model_peers: Vec<ModelPeer<AccountId>>,
+	// 	pub subnet_nodes: Vec<SubnetNode<AccountId>>,
 	// }
 
   #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
@@ -173,8 +173,8 @@ pub mod pallet {
 		T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap()
 	}
 	#[pallet::type_value]
-	pub fn DefaultModelPeer<T: Config>() -> ModelPeer<T::AccountId> {
-		return ModelPeer {
+	pub fn DefaultSubnetNode<T: Config>() -> SubnetNode<T::AccountId> {
+		return SubnetNode {
 			account_id: T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap(),
 			peer_id: PeerId(Vec::new()),
       ip: Vec::new(),
@@ -185,7 +185,7 @@ pub mod pallet {
 	pub fn DefaultActivatePropsParams<T: Config>() -> ActivatePropsParams<T::AccountId> {
 		return ActivatePropsParams {
 			path: Vec::new(),
-			model_peers: Vec::new(),
+			subnet_nodes: Vec::new(),
       max_block: 0,
     };
 	}
@@ -195,7 +195,7 @@ pub mod pallet {
       proposal_status: PropsStatus::None,
       proposal_type: PropsType::None,
 			path: Vec::new(),
-			model_peers: Vec::new(),
+			subnet_nodes: Vec::new(),
       max_block: 0,
     };
 	}
@@ -217,7 +217,7 @@ pub mod pallet {
 	// pub fn DefaultDeactivatePropsParams<T: Config>() -> DeactivatePropsParams<T::AccountId> {
 	// 	return DeactivatePropsParams {
 	// 		path: Vec::new(),
-	// 		model_peers: Vec::new(),
+	// 		subnet_nodes: Vec::new(),
   //   };
 	// }
   #[pallet::type_value]
@@ -228,17 +228,17 @@ pub mod pallet {
   #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
   enum VoteOutReason {
     // If model peers are performing manipulation for rewards
-    ModelEmissionsManipulation,
+    SubnetEmissionsManipulation,
     // If the model is down
-    ModelDown,
+    SubnetDown,
     // If the model isn't open-sourced
-    ModelCloseSourced,
+    SubnetCloseSourced,
     // If model is broken
-    ModelBroken,
+    SubnetBroken,
     // If the model doesn't have minimum required peers
-    ModelMinimumPeers,
+    SubnetMinimumNodes,
     // If the model is outputting illicit or illegal data
-    ModelIllicit,
+    SubnetIllicit,
     // Other
     Other,
   }
@@ -331,7 +331,7 @@ pub mod pallet {
   pub type Quorum<T> = StorageValue<_, u128, ValueQuery>;
   
   #[pallet::storage]
-  pub type PeerVotePremium<T> = StorageValue<_, u128, ValueQuery>;
+  pub type NodeVotePremium<T> = StorageValue<_, u128, ValueQuery>;
 
   #[pallet::pallet]
   #[pallet::without_storage_info]
@@ -344,7 +344,7 @@ pub mod pallet {
     pub fn propose(
       origin: OriginFor<T>, 
       path: Vec<u8>, 
-      model_peers: Vec<ModelPeer<T::AccountId>>,
+      subnet_nodes: Vec<SubnetNode<T::AccountId>>,
       proposal_type: PropsType
     ) -> DispatchResult {
       let account_id: T::AccountId = ensure_signed(origin)?;
@@ -355,11 +355,11 @@ pub mod pallet {
 			);
 
       if proposal_type == PropsType::Activate {
-        Self::try_propose_activate(account_id.clone(), path.clone(), model_peers.clone());
+        Self::try_propose_activate(account_id.clone(), path.clone(), subnet_nodes.clone());
       } else if proposal_type == PropsType::Deactivate {
         ensure!(
-          model_peers.clone().len() == 0,
-          Error::<T>::ModelPeersLengthInvalid
+          subnet_nodes.clone().len() == 0,
+          Error::<T>::SubnetNodesLengthInvalid
         );
         Self::try_propose_deactivate(account_id.clone(), path.clone());
       }
@@ -372,7 +372,7 @@ pub mod pallet {
           proposal_status: PropsStatus::Active,
           proposal_type: proposal_type,
           path: path.clone(),
-          model_peers: model_peers.clone(),
+          subnet_nodes: subnet_nodes.clone(),
           max_block: Self::convert_block_as_u64(<frame_system::Pallet<T>>::block_number() + T::VotingPeriod::get()),
         },
       );
@@ -388,14 +388,14 @@ pub mod pallet {
 
     #[pallet::call_index(1)]
     #[pallet::weight(0)]
-    pub fn propose_activate(origin: OriginFor<T>, path: Vec<u8>, model_peers: Vec<ModelPeer<T::AccountId>>) -> DispatchResult {
+    pub fn propose_activate(origin: OriginFor<T>, path: Vec<u8>, subnet_nodes: Vec<SubnetNode<T::AccountId>>) -> DispatchResult {
 			let account_id: T::AccountId = ensure_signed(origin)?;
 
-      // // Check path doesn't already exist in Network or ModelVoting
+      // // Check path doesn't already exist in Network or SubnetVoting
       // // If it doesn't already exist, then it has either been not proposed or deactivated
 			// ensure!(
-			// 	!T::ModelVote::get_model_path_exist(path.clone()),
-			// 	Error::<T>::ModelPathExists
+			// 	!T::SubnetVote::get_model_path_exist(path.clone()),
+			// 	Error::<T>::SubnetPathExists
 			// );
 
       // // Ensure can propose new model path
@@ -411,7 +411,7 @@ pub mod pallet {
       // // ...
 
       // // Ensure account has enough balance to pay cost of model initialization
-      // let model_initialization_cost = T::ModelVote::get_model_initialization_cost();
+      // let model_initialization_cost = T::SubnetVote::get_model_initialization_cost();
       // let model_initialization_cost_as_balance = Self::u128_to_balance(model_initialization_cost);
 
       // ensure!(
@@ -422,7 +422,7 @@ pub mod pallet {
       // let initializer_balance = T::Currency::free_balance(&account_id);
       // ensure!(
 			// 	model_initialization_cost_as_balance.unwrap() >= initializer_balance,
-			// 	Error::<T>::NotEnoughModelInitializationBalance
+			// 	Error::<T>::NotEnoughSubnetInitializationBalance
 			// );
 
       // // Lock balance
@@ -441,13 +441,13 @@ pub mod pallet {
       // // Ensure minimum peers required are already met before going forward
       // // @to-do: Get minimum model peers from network pallet
 			// ensure!(
-			// 	model_peers.len() as u32 >= T::ModelVote::get_min_model_peers() && 
-      //   model_peers.len() as u32 <= T::ModelVote::get_max_model_peers(),
-			// 	Error::<T>::ModelPeersLengthInvalid
+			// 	subnet_nodes.len() as u32 >= T::SubnetVote::get_min_subnet_nodes() && 
+      //   subnet_nodes.len() as u32 <= T::SubnetVote::get_max_subnet_nodes(),
+			// 	Error::<T>::SubnetNodesLengthInvalid
 			// );
 
       // // Ensure peers have the minimum required stake balance
-      // let min_stake: u128 = T::ModelVote::get_min_stake_balance();
+      // let min_stake: u128 = T::SubnetVote::get_min_stake_balance();
       // let min_stake_as_balance = Self::u128_to_balance(min_stake);
 
       // ensure!(
@@ -455,7 +455,7 @@ pub mod pallet {
       //   Error::<T>::CouldNotConvertToBalance
       // );
 
-      // for peer in model_peers.clone() {
+      // for peer in subnet_nodes.clone() {
       //   let peer_balance = T::Currency::free_balance(&peer.account_id);
 
       //   ensure!(
@@ -471,7 +471,7 @@ pub mod pallet {
       //   activate_proposal_index,
       //   ActivatePropsParams {
       //     path: path.clone(),
-      //     model_peers: model_peers.clone(),
+      //     subnet_nodes: subnet_nodes.clone(),
       //     max_block: Self::convert_block_as_u64(<frame_system::Pallet<T>>::block_number() + T::VotingPeriod::get()),
       //   },
       // );
@@ -505,11 +505,11 @@ pub mod pallet {
 
       // // Ensure path exists in Network
 			// ensure!(
-			// 	T::ModelVote::get_model_id_exist(model_id.clone()),
-			// 	Error::<T>::ModelIdNotExists
+			// 	T::SubnetVote::get_model_id_exist(model_id.clone()),
+			// 	Error::<T>::SubnetIdNotExists
 			// );
 
-      // let model_data = T::ModelVote::get_model_data(model_id.clone());
+      // let model_data = T::SubnetVote::get_model_data(model_id.clone());
       // let path = model_data.path;
 
       // // Ensure can propose new model path
@@ -650,12 +650,12 @@ pub mod pallet {
 
 // impl<T: Config + pallet::Config> Pallet<T> {
 impl<T: Config> Pallet<T> {
-  // fn try_propose_activate(account_id: T::AccountId, path: Vec<u8>, model_peers: Vec<ModelPeer<T::AccountId>>) -> DispatchResult {
-  //   // Check path doesn't already exist in Network or ModelVoting
+  // fn try_propose_activate(account_id: T::AccountId, path: Vec<u8>, subnet_nodes: Vec<SubnetNode<T::AccountId>>) -> DispatchResult {
+  //   // Check path doesn't already exist in Network or SubnetVoting
   //   // If it doesn't already exist, then it has either been not proposed or deactivated
   //   ensure!(
-  //     !T::ModelVote::get_model_path_exist(path.clone()),
-  //     Error::<T>::ModelPathExists
+  //     !T::SubnetVote::get_model_path_exist(path.clone()),
+  //     Error::<T>::SubnetPathExists
   //   );
 
   //   // Ensure can propose new model path
@@ -672,7 +672,7 @@ impl<T: Config> Pallet<T> {
   //   // // ...
 
   //   // Ensure account has enough balance to pay cost of model initialization
-  //   let model_initialization_cost = T::ModelVote::get_model_initialization_cost();
+  //   let model_initialization_cost = T::SubnetVote::get_model_initialization_cost();
   //   let model_initialization_cost_as_balance = Self::u128_to_balance(model_initialization_cost);
 
   //   ensure!(
@@ -683,7 +683,7 @@ impl<T: Config> Pallet<T> {
   //   let initializer_balance = T::Currency::free_balance(&account_id);
   //   ensure!(
   //     model_initialization_cost_as_balance.unwrap() >= initializer_balance,
-  //     Error::<T>::NotEnoughModelInitializationBalance
+  //     Error::<T>::NotEnoughSubnetInitializationBalance
   //   );
 
   //   // Lock balance
@@ -702,13 +702,13 @@ impl<T: Config> Pallet<T> {
   //   // Ensure minimum peers required are already met before going forward
   //   // @to-do: Get minimum model peers from network pallet
   //   ensure!(
-  //     model_peers.len() as u32 >= T::ModelVote::get_min_model_peers() && 
-  //     model_peers.len() as u32 <= T::ModelVote::get_max_model_peers(),
-  //     Error::<T>::ModelPeersLengthInvalid
+  //     subnet_nodes.len() as u32 >= T::SubnetVote::get_min_subnet_nodes() && 
+  //     subnet_nodes.len() as u32 <= T::SubnetVote::get_max_subnet_nodes(),
+  //     Error::<T>::SubnetNodesLengthInvalid
   //   );
 
   //   // Ensure peers have the minimum required stake balance
-  //   let min_stake: u128 = T::ModelVote::get_min_stake_balance();
+  //   let min_stake: u128 = T::SubnetVote::get_min_stake_balance();
   //   let min_stake_as_balance = Self::u128_to_balance(min_stake);
 
   //   ensure!(
@@ -716,7 +716,7 @@ impl<T: Config> Pallet<T> {
   //     Error::<T>::CouldNotConvertToBalance
   //   );
 
-  //   for peer in model_peers.clone() {
+  //   for peer in subnet_nodes.clone() {
   //     let peer_balance = T::Currency::free_balance(&peer.account_id);
 
   //     ensure!(
@@ -733,7 +733,7 @@ impl<T: Config> Pallet<T> {
   //     activate_proposal_index,
   //     ActivatePropsParams {
   //       path: path.clone(),
-  //       model_peers: model_peers.clone(),
+  //       subnet_nodes: subnet_nodes.clone(),
   //       max_block: Self::convert_block_as_u64(<frame_system::Pallet<T>>::block_number() + T::VotingPeriod::get()),
   //     },
   //   );
@@ -745,12 +745,12 @@ impl<T: Config> Pallet<T> {
   //   Ok(())
   // }
 
-  fn try_propose_activate(account_id: T::AccountId, path: Vec<u8>, model_peers: Vec<ModelPeer<T::AccountId>>) -> DispatchResult {
-    // --- Ensure path doesn't already exist in Network or ModelVoting
+  fn try_propose_activate(account_id: T::AccountId, path: Vec<u8>, subnet_nodes: Vec<SubnetNode<T::AccountId>>) -> DispatchResult {
+    // --- Ensure path doesn't already exist in Network or SubnetVoting
     // If it doesn't already exist, then it has either been not proposed or deactivated
     ensure!(
-      !T::ModelVote::get_model_path_exist(path.clone()),
-      Error::<T>::ModelPathExists
+      !T::SubnetVote::get_model_path_exist(path.clone()),
+      Error::<T>::SubnetPathExists
     );
 
     // --- Ensure proposal on model path not already in progress
@@ -762,7 +762,7 @@ impl<T: Config> Pallet<T> {
     );
 
     // --- Ensure account has enough balance to pay cost of model initialization
-    let model_initialization_cost = T::ModelVote::get_model_initialization_cost();
+    let model_initialization_cost = T::SubnetVote::get_model_initialization_cost();
     let model_initialization_cost_as_balance = Self::u128_to_balance(model_initialization_cost);
 
     ensure!(
@@ -773,7 +773,7 @@ impl<T: Config> Pallet<T> {
     let initializer_balance = T::Currency::free_balance(&account_id);
     ensure!(
       model_initialization_cost_as_balance.unwrap() >= initializer_balance,
-      Error::<T>::NotEnoughModelInitializationBalance
+      Error::<T>::NotEnoughSubnetInitializationBalance
     );
 
     // --- Lock balance to be used once succeeded, otherwise it is freed on defeat
@@ -788,13 +788,13 @@ impl<T: Config> Pallet<T> {
     // --- Ensure minimum peers required are already met before going forward
     // @to-do: Get minimum model peers from network pallet
     ensure!(
-      model_peers.len() as u32 >= T::ModelVote::get_min_model_peers() && 
-      model_peers.len() as u32 <= T::ModelVote::get_max_model_peers(),
-      Error::<T>::ModelPeersLengthInvalid
+      subnet_nodes.len() as u32 >= T::SubnetVote::get_min_subnet_nodes() && 
+      subnet_nodes.len() as u32 <= T::SubnetVote::get_max_subnet_nodes(),
+      Error::<T>::SubnetNodesLengthInvalid
     );
 
     // --- Ensure peers have the minimum required stake balance
-    let min_stake: u128 = T::ModelVote::get_min_stake_balance();
+    let min_stake: u128 = T::SubnetVote::get_min_stake_balance();
     let min_stake_as_balance = Self::u128_to_balance(min_stake);
 
     ensure!(
@@ -802,7 +802,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::CouldNotConvertToBalance
     );
 
-    for peer in model_peers.clone() {
+    for peer in subnet_nodes.clone() {
       let peer_balance = T::Currency::free_balance(&peer.account_id);
 
       ensure!(
@@ -819,8 +819,8 @@ impl<T: Config> Pallet<T> {
   fn try_propose_deactivate(account_id: T::AccountId, path: Vec<u8>) -> DispatchResult {
     // --- Ensure model ID exists to be removed
     ensure!(
-      T::ModelVote::get_model_id_by_path(path.clone()) != 0,
-      Error::<T>::ModelIdNotExists
+      T::SubnetVote::get_model_id_by_path(path.clone()) != 0,
+      Error::<T>::SubnetIdNotExists
     );
 
     // --- Ensure proposal on model path not already in progress
@@ -882,10 +882,10 @@ impl<T: Config> Pallet<T> {
   }
 
   fn get_voting_power(account_id: T::AccountId, balance: BalanceOf<T>) -> u128 {
-    // let is_submittable_model_peer_account: bool = T::ModelVote::is_submittable_model_peer_account(account_id);
+    // let is_submittable_subnet_node_account: bool = T::SubnetVote::is_submittable_subnet_node_account(account_id);
 
-    // if is_submittable_model_peer_account {
-    //   let peer_vote_premium = Perbill::from_rational(PeerVotePremium::<T>::get(), 100 as u128);
+    // if is_submittable_subnet_node_account {
+    //   let peer_vote_premium = Perbill::from_rational(NodeVotePremium::<T>::get(), 100 as u128);
     //   let voting_power = balance.saturating_add(peer_vote_premium * balance);
     //   return Self::balance_to_u128(voting_power)
     // }

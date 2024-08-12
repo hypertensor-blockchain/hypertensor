@@ -17,14 +17,14 @@ pub struct Custom {
 
 #[rpc(client, server)]
 pub trait NetworkCustomApi<BlockHash> {
-	#[method(name = "network_getModelPeers")]
-	fn get_model_peers(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
-	#[method(name = "network_getModelPeersInclude")]
-	fn get_model_peers_include(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
-	#[method(name = "network_getModelPeersSubmittable")]
-	fn get_model_peers_submittable(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
-	#[method(name = "network_getModelPeersModelUnconfirmedCount")]
-	fn get_model_peers_model_unconfirmed_count(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<u32>;
+	#[method(name = "network_getSubnetNodes")]
+	fn get_subnet_nodes(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
+	#[method(name = "network_getSubnetNodesInclude")]
+	fn get_subnet_nodes_include(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
+	#[method(name = "network_getSubnetNodesSubmittable")]
+	fn get_subnet_nodes_submittable(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
+	#[method(name = "network_getSubnetNodesModelUnconfirmedCount")]
+	fn get_subnet_nodes_model_unconfirmed_count(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<u32>;
 }
 
 /// A struct that implements the `NetworkCustomApi`.
@@ -65,25 +65,25 @@ where
 	C: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
 	C::Api: NetworkRuntimeApi<Block>,
 {
-	fn get_model_peers(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
+	fn get_subnet_nodes(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
 		let api = self.client.runtime_api();
 		let at = at.unwrap_or_else(|| self.client.info().best_hash);
-		api.get_model_peers(at, model_id).map_err(runtime_error_into_rpc_err)
+		api.get_subnet_nodes(at, model_id).map_err(runtime_error_into_rpc_err)
 	}
-	fn get_model_peers_include(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
+	fn get_subnet_nodes_include(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
 		let api = self.client.runtime_api();
 		let at = at.unwrap_or_else(|| self.client.info().best_hash);
-		api.get_model_peers_included(at, model_id).map_err(runtime_error_into_rpc_err)
+		api.get_subnet_nodes_included(at, model_id).map_err(runtime_error_into_rpc_err)
 	}
-	fn get_model_peers_submittable(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
+	fn get_subnet_nodes_submittable(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
 		let api = self.client.runtime_api();
 		let at = at.unwrap_or_else(|| self.client.info().best_hash);
-		api.get_model_peers_submittable(at, model_id).map_err(runtime_error_into_rpc_err)
+		api.get_subnet_nodes_submittable(at, model_id).map_err(runtime_error_into_rpc_err)
 	}
-	fn get_model_peers_model_unconfirmed_count(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<u32> {
+	fn get_subnet_nodes_model_unconfirmed_count(&self, model_id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<u32> {
 		let api = self.client.runtime_api();
 		let at = at.unwrap_or_else(|| self.client.info().best_hash);
-		api.get_model_peers_model_unconfirmed_count(at, model_id).map_err(runtime_error_into_rpc_err)
+		api.get_subnet_nodes_model_unconfirmed_count(at, model_id).map_err(runtime_error_into_rpc_err)
 	}
 }
 

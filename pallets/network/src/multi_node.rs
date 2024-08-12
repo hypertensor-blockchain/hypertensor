@@ -1,6 +1,6 @@
 /// Logic for scaling subnet nodes to millions of nodes
 /// Uses:
-///   1. One model peer slot can be opened to multiple nodes that subnets verify
+///   1. One subnet peer slot can be opened to multiple nodes that subnets verify
 ///
 /// The `owner` controls the multinode
 ///   - Who can come in and out of the multinode
@@ -17,17 +17,17 @@ use sp_io::hashing::blake2_256;
 use sp_runtime::traits::TrailingZeroInput;
 
 impl<T: Config> Pallet<T> {
-  pub fn add_multi_node_model_peer(multi_node_id: T::AccountId) -> DispatchResult {
+  pub fn add_multi_node_subnet_node(multi_node_id: T::AccountId) -> DispatchResult {
     // --- Ensure owner
 
-    // --- Add model peer
+    // --- Add subnet peer
     Ok(())
   }
 
-  pub fn remove_multi_node_model_peer(multi_node_id: T::AccountId) -> DispatchResult {
+  pub fn remove_multi_node_subnet_node(multi_node_id: T::AccountId) -> DispatchResult {
     // --- Ensure owner
 
-    // --- Remove model peer
+    // --- Remove subnet peer
     Ok(())
   }
 

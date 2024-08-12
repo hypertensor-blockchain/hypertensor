@@ -199,7 +199,7 @@ impl<T: Config> Pallet<T> {
 		true
 	}
 
-  // Loosely validates Peer ID
+  // Loosely validates Node ID
   pub fn validate_peer_id(peer_id: PeerId) -> bool {
     let mut valid = false;
 
@@ -218,13 +218,13 @@ impl<T: Config> Pallet<T> {
     let second_char = peer_id_0[1];
 
     if first_char == 49 {
-      // Peer ID (ed25519, using the "identity" multihash) encoded as a raw base58btc multihash
+      // Node ID (ed25519, using the "identity" multihash) encoded as a raw base58btc multihash
       valid = len <= 128;
     } else if first_char == 81 && second_char == 109 {
-      // Peer ID (sha256) encoded as a raw base58btc multihash
+      // Node ID (sha256) encoded as a raw base58btc multihash
       valid = len <= 128;
     } else if first_char == 102 || first_char == 98 || first_char == 122 || first_char == 109 {
-      // Peer ID (sha256) encoded as a CID
+      // Node ID (sha256) encoded as a CID
       valid = len <= 128;
     }
     
@@ -251,31 +251,31 @@ impl<T: Config> Pallet<T> {
   //   result
   // }
 
-  // get eligible blocks for consensus submissions and inclusion on models and peers
+  // get eligible blocks for consensus submissions and inclusion on subnets and peers
   pub fn get_eligible_epoch_block(epoch_length: u64, initialized: u64, epochs: u64) -> u64 {
     let eligible_block: u64 = initialized - (initialized % epoch_length) + epoch_length * epochs;
     eligible_block
   }
 
   pub fn get_model_initialization_cost(block: u64) -> u128 {
-    let mut model_peers_included_count: u128 = 0;
+    let mut subnet_nodes_included_count: u128 = 0;
     let epoch_length: u64 = EpochLength::<T>::get();
-    let min_required_consensus_inclusion_epochs = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
+    let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
 
-    for model_peer in ModelPeersData::<T>::iter_values() {
+    for subnet_node in SubnetNodesData::<T>::iter_values() {
       let is_included: bool = block >= Self::get_eligible_epoch_block(
         epoch_length, 
-        model_peer.initialized, 
+        subnet_node.initialized, 
         min_required_consensus_inclusion_epochs
       );
 
       if is_included {
-        model_peers_included_count += 1;
+        subnet_nodes_included_count += 1;
       }
     }
 
-    let init_cost = ModelPerPeerInitCost::<T>::get();
-    model_peers_included_count * init_cost
+    let init_cost = SubnetPerNodeInitCost::<T>::get();
+    subnet_nodes_included_count * init_cost
   }
 
   // Returns true if consensus block steps are being performed
@@ -288,21 +288,21 @@ impl<T: Config> Pallet<T> {
   // If can submit consensus
   //  • Must not be in consensus steps, that is forming consensus or generating emissions
   //  • Must not be in can remove peer range
-  // This allows model peers to query consensus data before submitting based on
+  // This allows subnet peers to query consensus data before submitting based on
   // currently stored and live peers
   //
-  // e.g. If a model peer is removed in the middle of consensus submissions, model peers can
+  // e.g. If a subnet peer is removed in the middle of consensus submissions, subnet peers can
   //      manipulate the storage to have other peers forced out of consensus
   pub fn can_submit_consensus(block: u64, epoch_length: u64) -> bool {
     let in_consensus_steps: bool = Self::is_in_consensus_steps(block, epoch_length);
-    let can_remove_or_update_model_peer: bool = Self::can_remove_or_update_model_peer(block, epoch_length);
-    !in_consensus_steps && !can_remove_or_update_model_peer
+    let can_remove_or_update_subnet_node: bool = Self::can_remove_or_update_subnet_node(block, epoch_length);
+    !in_consensus_steps && !can_remove_or_update_subnet_node
   }
   
-  // If a model or model peer is able to be included or submit consensus
+  // If a subnet or subnet peer is able to be included or submit consensus
   //
   // This checks if the block is equal to or greater than therefor shouldn't 
-  // be used while checking if a model or model peer was able to accept or be 
+  // be used while checking if a subnet or subnet peer was able to accept or be 
   // included in consensus during the forming of consensus since it checks for
   // the previous epochs eligibility
   pub fn is_epoch_block_eligible(
@@ -320,27 +320,27 @@ impl<T: Config> Pallet<T> {
 
   // @to-do
   pub fn can_model_accept_consensus_submissions(
-    model_id: u32,
+    subnet_id: u32,
     block: u64, 
     epoch_length: u64
   ) -> bool {
     true
   }
 
-  // Can a model peel be updated or removed
+  // Can a subnet peel be updated or removed
   //
-  // Model peers can update/remove at the beginning of each epoch
-  // based on the RemoveModelPeerEpochPercentage as a percentage
+  // Subnet peers can update/remove at the beginning of each epoch
+  // based on the RemoveSubnetNodeEpochPercentage as a percentage
   // of the epochs blocks span
   //
   // This is to avoid any storage changes that can impact consensus or emissions
-  pub fn can_remove_or_update_model_peer(block: u64, epoch_length: u64) -> bool {
+  pub fn can_remove_or_update_subnet_node(block: u64, epoch_length: u64) -> bool {
     let in_consensus_steps: bool = Self::is_in_consensus_steps(block, epoch_length);
 
     // Get percentage of beginning of epoch can remove peer
-    let remove_peer_block_percentage_of_epoch = RemoveModelPeerEpochPercentage::<T>::get();
+    let remove_peer_block_percentage_of_epoch = RemoveSubnetNodeEpochPercentage::<T>::get();
 
-    // Get blocks span following consensus steps model peers can exit
+    // Get blocks span following consensus steps subnet peers can exit
     let block_span_can_remove_peer = Self::percent_mul(
       epoch_length as u128,
       remove_peer_block_percentage_of_epoch
@@ -354,11 +354,11 @@ impl<T: Config> Pallet<T> {
     //      • If the epoch_length is 100 blocks per epoch
     //      • If the percentage is 10.0% of the epoch resulting in 8 blocks (10 blocks - 2 steps)
     //          • 10000-10001 will be the consensus steps
-    //          • 10002-10010 will be the model removal span
+    //          • 10002-10010 will be the subnet removal span
     //          • 10002 will be the start block
     //          • 10010 will be the end block
-    //          • Model peers can exit/update between block 10002 and 10010
-    //          • Thus model peers can submit consensus between 10011 - 10100
+    //          • Subnet peers can exit/update between block 10002 and 10010
+    //          • Thus subnet peers can submit consensus between 10011 - 10100
 
     // start the block after consensus steps
     let start_block = Self::CONSENSUS_STEPS + (block - (block % epoch_length));
@@ -370,7 +370,7 @@ impl<T: Config> Pallet<T> {
     start_block <= block && block <= end_block && !in_consensus_steps
   }
 
-  // Get model peer is eligible to be a model peer
+  // Get subnet peer is eligible to be a subnet peer
   // Checks if account penalties do not surpass the max allowed penalties
   pub fn is_account_eligible(account_id: T::AccountId) -> bool {
     let max_account_penalty_count = MaxAccountPenaltyCount::<T>::get();
@@ -379,196 +379,236 @@ impl<T: Config> Pallet<T> {
   }
 
 
-  // Remove all account's model peers across all of their models
-  pub fn do_remove_account_model_peers(block: u64, account_id: T::AccountId) {
-    let model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
-    for model_id in model_ids.iter() {
-      Self::do_remove_model_peer(block, *model_id, account_id.clone());
+  // Remove all account's subnet peers across all of their subnets
+  pub fn do_remove_account_subnet_nodes(block: u64, account_id: T::AccountId) {
+    let model_ids: Vec<u32> = AccountSubnets::<T>::get(account_id.clone());
+    for subnet_id in model_ids.iter() {
+      Self::do_remove_subnet_node(block, *subnet_id, account_id.clone());
     }
   }
 
-  /// Remove model peer from model
-  // to-do: Add slashing to model peers stake balance
+  /// Remove subnet peer from subnet
+  // to-do: Add slashing to subnet peers stake balance
   // note: We don't reset AccountPenaltyCount
-  pub fn do_remove_model_peer(block: u64, model_id: u32, account_id: T::AccountId) {
-    // Take and remove ModelPeersData account_id as key
+  pub fn do_remove_subnet_node(block: u64, subnet_id: u32, account_id: T::AccountId) {
+    // Take and remove SubnetNodesData account_id as key
     // `take()` returns and removes data
-    let model_peer = ModelPeersData::<T>::take(model_id.clone(), account_id.clone());
+    if let Ok(subnet_node) = SubnetNodesData::<T>::try_get(subnet_id.clone(), account_id.clone()) {
+      let peer_id = subnet_node.clone().peer_id;
 
-    // Remove ModelPeerAccount peer_id as key
-    ModelPeerAccount::<T>::remove(model_id.clone(), model_peer.clone().peer_id);
+      SubnetNodesData::<T>::remove(subnet_id.clone(), account_id.clone());
 
-    // Update ModelAccount to reflect removal block instead of initialized block
-    // Peer will be able to unstake after required epochs have passed
-    let mut model_accounts: BTreeMap<T::AccountId, u64> = ModelAccount::<T>::get(model_id.clone());
-    model_accounts.insert(account_id.clone(), block);
-    ModelAccount::<T>::insert(model_id.clone(), model_accounts);
+      // Remove SubnetNodeAccount peer_id as key
+      SubnetNodeAccount::<T>::remove(subnet_id.clone(), subnet_node.clone().peer_id);
 
-    // Update total model peers by substracting 1
-    TotalModelPeers::<T>::mutate(model_id.clone(), |n: &mut u32| *n -= 1);
+      // Update SubnetAccount to reflect removal block instead of initialized block
+      // Node will be able to unstake after required epochs have passed
+      let mut model_accounts: BTreeMap<T::AccountId, u64> = SubnetAccount::<T>::get(subnet_id.clone());
+      model_accounts.insert(account_id.clone(), block);
+      SubnetAccount::<T>::insert(subnet_id.clone(), model_accounts);
 
-    // Remove model peer consensus results
-    ModelPeerConsensusResults::<T>::remove(model_id.clone(), account_id.clone());
+      // Update total subnet peers by substracting 1
+      TotalSubnetNodes::<T>::mutate(subnet_id.clone(), |n: &mut u32| *n -= 1);
 
-    ModelPeerConsecutiveConsensusSent::<T>::remove(model_id.clone(), account_id.clone());
-    ModelPeerConsecutiveConsensusNotSent::<T>::remove(model_id.clone(), account_id.clone());
+      // Remove subnet_id from AccountSubnets
+      let mut account_model_ids: Vec<u32> = AccountSubnets::<T>::get(account_id.clone());
+      account_model_ids.retain(|&x| x != subnet_id);
+      // Insert retained subnet_id's
+      AccountSubnets::<T>::insert(account_id.clone(), account_model_ids);
 
-    PeerConsensusEpochSubmitted::<T>::remove(model_id.clone(), account_id.clone());
-    PeerConsensusEpochUnconfirmed::<T>::remove(model_id.clone(), account_id.clone());
+      // Remove if accountant
+      // let mut accountants: Vec<T::AccountId> = Accountants::<T>::get(subnet_id.clone());
+      // accountants.retain(|&x| x != account_id.clone());
+      // Accountants::<T>::insert(subnet_id.clone().clone(), accountants);
 
-    // Remove model_id from AccountModels
-    let mut account_model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
-    account_model_ids.retain(|&x| x != model_id);
-    // Insert retained model_id's
-    AccountModels::<T>::insert(account_id.clone(), account_model_ids);
+      // ===
+      // Remove subnet peer consensus results
+      // ===
+      SubnetNodeConsensusResults::<T>::remove(subnet_id.clone(), account_id.clone());
 
-    // Remove if accountant
-    // let mut accountants: Vec<T::AccountId> = Accountants::<T>::get(model_id.clone());
-    // accountants.retain(|&x| x != account_id.clone());
-    // Accountants::<T>::insert(model_id.clone().clone(), accountants);
+      SubnetNodeConsecutiveConsensusSent::<T>::remove(subnet_id.clone(), account_id.clone());
+      SubnetNodeConsecutiveConsensusNotSent::<T>::remove(subnet_id.clone(), account_id.clone());
 
-    log::info!("Removed model peer AccountId {:?} from model ID {:?}", account_id.clone(), model_id.clone());
+      NodeConsensusEpochSubmitted::<T>::remove(subnet_id.clone(), account_id.clone());
+      NodeConsensusEpochUnconfirmed::<T>::remove(subnet_id.clone(), account_id.clone());
 
-    Self::deposit_event(
-      Event::ModelPeerRemoved { 
-        model_id: model_id.clone(), 
-        account_id: account_id.clone(), 
-        peer_id: model_peer.clone().peer_id,
-        block: block
-      }
-    );
+      log::info!("Removed subnet peer AccountId {:?} from subnet ID {:?}", account_id.clone(), subnet_id.clone());
+
+      Self::deposit_event(
+        Event::SubnetNodeRemoved { 
+          subnet_id: subnet_id.clone(), 
+          account_id: account_id.clone(), 
+          peer_id: peer_id,
+          block: block
+        }
+      );
+    }
   }
 
+  // pub fn do_add_subnet_node(
+  //   block: u64, 
+  //   subnet_id: u32, 
+  //   account_id: T::AccountId,
+  //   peer_id: PeerId,
+  //   ip: Vec<u8>,
+  //   port: u16,
+  // ) {
+  //   let subnet_node: SubnetNode<T::AccountId> = SubnetNode {
+  //     account_id: account_id.clone(),
+  //     peer_id: peer_id.clone(),
+  //     ip: ip.clone(),
+  //     port: port.clone(),
+  //     initialized: block,
+  //   };
+
+  //   // Insert SubnetNodesData with account_id as key
+  //   SubnetNodesData::<T>::insert(subnet_id.clone(), account_id.clone(), subnet_node);
+
+  //   // Insert subnet peer account to keep peer_ids unique within subnets
+  //   SubnetNodeAccount::<T>::insert(subnet_id.clone(), peer_id.clone(), account_id.clone());
+
+  //   // Update to current block
+  //   model_accounts.insert(account_id.clone(), block);
+  //   SubnetAccount::<T>::insert(subnet_id.clone(), model_accounts);
+
+  //   // Add subnet_id to account
+  //   // Account can only have a subnet peer per subnet so we don't check if it exists
+  //   AccountSubnets::<T>::append(account_id.clone(), subnet_id.clone());
+
+  //   // Increase total subnet peers
+  //   TotalSubnetNodes::<T>::mutate(subnet_id.clone(), |n: &mut u32| *n += 1);
+  // }
+
   pub fn get_account_slash_percentage(account_id: T::AccountId) -> u128 {
-    let model_ids: Vec<u32> = AccountModels::<T>::get(account_id.clone());
+    let model_ids: Vec<u32> = AccountSubnets::<T>::get(account_id.clone());
     0
   }
 
-  // model_id: UID of model
+  // subnet_id: UID of subnet
   // block: current block
   // epoch_length: the number of blocks per epoch
   // epochs: required number of epochs
-  pub fn get_total_eligible_model_peers_count(
-    model_id: u32,
+  pub fn get_total_eligible_subnet_nodes_count(
+    subnet_id: u32,
     block: u64,
     epoch_length: u64,
     epochs: u64
   ) -> u32 {
-    // Count of eligible to submit consensus data model peers
-    let mut total_eligible_model_peers = 0;
+    // Count of eligible to submit consensus data subnet peers
+    let mut total_eligible_subnet_nodes = 0;
     
-    // increment total_eligible_model_peers with model peers that are eligible to submit consensus data
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      let initialized: u64 = model_peer.initialized;
+    // increment total_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+      let initialized: u64 = subnet_node.initialized;
       if Self::is_epoch_block_eligible(
         block, 
         epoch_length, 
         epochs, 
         initialized
       ) {
-        total_eligible_model_peers += 1;
+        total_eligible_subnet_nodes += 1;
       }
     }
 
-    total_eligible_model_peers
+    total_eligible_subnet_nodes
   }
 
-  // Gets the count of all eligible to submit model peers on the previous epoch to account for the current block steps
-  // model_id: UID of model
+  // Gets the count of all eligible to submit subnet peers on the previous epoch to account for the current block steps
+  // subnet_id: UID of subnet
   // block: current block
   // epoch_length: the number of blocks per epoch
   // epochs: required number of epochs
-  pub fn get_prev_epoch_total_eligible_model_peers_count(
-    model_id: u32,
+  pub fn get_prev_epoch_total_eligible_subnet_nodes_count(
+    subnet_id: u32,
     block: u64,
     epoch_length: u64,
     epochs: u64
   ) -> u32 {
-    // Count of eligible to submit consensus data model peers
-    let mut total_eligible_model_peers = 0;
+    // Count of eligible to submit consensus data subnet peers
+    let mut total_eligible_subnet_nodes = 0;
     
-    // increment total_eligible_model_peers with model peers that are eligible to submit consensus data
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      let initialized: u64 = model_peer.initialized;
+    // increment total_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+      let initialized: u64 = subnet_node.initialized;
       if block > Self::get_eligible_epoch_block(
         epoch_length, 
         initialized, 
         epochs
       ) {
-        total_eligible_model_peers += 1;
+        total_eligible_subnet_nodes += 1;
       }
     }
 
-    total_eligible_model_peers
+    total_eligible_subnet_nodes
   }
 
-  // model_id: UID of model
+  // subnet_id: UID of subnet
   // block: current block
   // epoch_length: the number of blocks per epoch
   // epochs: required number of epochs
-  pub fn get_eligible_model_peers_accounts(
-    model_id: u32,
+  pub fn get_eligible_subnet_nodes_accounts(
+    subnet_id: u32,
     block: u64,
     epoch_length: u64,
     epochs: u64
   ) -> Vec<T::AccountId> {
-    // Count of eligible to submit consensus data model peers
+    // Count of eligible to submit consensus data subnet peers
     let mut account_ids: Vec<T::AccountId> = Vec::new();
     
-    // increment total_eligible_model_peers with model peers that are eligible to submit consensus data
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      let initialized: u64 = model_peer.initialized;
+    // increment total_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+      let initialized: u64 = subnet_node.initialized;
       if Self::is_epoch_block_eligible(
         block, 
         epoch_length, 
         epochs, 
         initialized
       ) {
-        account_ids.push(model_peer.account_id)
+        account_ids.push(subnet_node.account_id)
       }
     }
 
     account_ids
   }
 
-  // model_id: UID of model
+  // subnet_id: UID of subnet
   // block: current block
   // epoch_length: the number of blocks per epoch
   // epochs: required number of epochs
   pub fn get_total_accountants(
-    model_id: u32,
+    subnet_id: u32,
     block: u64,
     epoch_length: u64,
     epochs: u64
   ) -> u32 {
-    // Count of eligible to submit consensus data model peers
-    let mut total_submit_eligible_model_peers = 0;
+    // Count of eligible to submit consensus data subnet peers
+    let mut total_submit_eligible_subnet_nodes = 0;
     
-    // increment total_submit_eligible_model_peers with model peers that are eligible to submit consensus data
-    for model_peer in ModelPeersData::<T>::iter_prefix_values(model_id.clone()) {
-      let initialized: u64 = model_peer.initialized;
+    // increment total_submit_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+      let initialized: u64 = subnet_node.initialized;
       if Self::is_epoch_block_eligible(
         block, 
         epoch_length, 
         epochs, 
         initialized
       ) {
-        total_submit_eligible_model_peers += 1;
+        total_submit_eligible_subnet_nodes += 1;
       }
     }
 
-    total_submit_eligible_model_peers
+    total_submit_eligible_subnet_nodes
   }
 
   // pub fn is_accountant(
-  //   model_id: u32, 
+  //   subnet_id: u32, 
   //   account_id: u32
   // ) -> bool {
-  //   let account_model_peer = ModelPeersData::<T>::get(model_id.clone(), account_id.clone());
-  //   let submitter_peer_initialized: u64 = account_model_peer.initialized;
+  //   let account_subnet_node = SubnetNodesData::<T>::get(subnet_id.clone(), account_id.clone());
+  //   let submitter_peer_initialized: u64 = account_subnet_node.initialized;
   //   let block: u64 = Self::get_current_block_as_u64();
   //   let epoch_length: u64 = EpochLength::<T>::get();
-  //   let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
+  //   let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
 
   //   return Self::is_epoch_block_eligible(
   //     block, 
@@ -578,32 +618,54 @@ impl<T: Config> Pallet<T> {
   //   )
   // }
 
-  /// Check if model ID exists and account has a model peer within model ID exists
-  pub fn is_model_and_model_peer(model_id: u32, account_id: T::AccountId) -> bool {
-    if !ModelsData::<T>::contains_key(model_id.clone()) {
+  /// Check if subnet ID exists and account has a subnet peer within subnet ID exists
+  pub fn is_model_and_subnet_node(subnet_id: u32, account_id: T::AccountId) -> bool {
+    if !SubnetsData::<T>::contains_key(subnet_id.clone()) {
       return false
     }
 
-    if !ModelPeersData::<T>::contains_key(model_id.clone(), account_id) {
+    if !SubnetNodesData::<T>::contains_key(subnet_id.clone(), account_id) {
       return false
     }
 
     return true
   }
 
-  /// Check if model ID exists, account has a model peer within model ID exists, and peer ID exists within model
-  // Note: We aren't checking if the account is the model peer, just if they exist at all
-  pub fn is_model_and_model_peer_and_model_peer_account(model_id: u32, peer_id: PeerId, account_id: T::AccountId) -> bool {
-    if !Self::is_model_and_model_peer(model_id.clone(), account_id) {
+  /// Check if subnet ID exists, account has a subnet peer within subnet ID exists, and peer ID exists within subnet
+  // Note: We aren't checking if the account is the subnet peer, just if they exist at all
+  pub fn is_model_and_subnet_node_and_subnet_node_account(
+    subnet_id: u32, 
+    peer_id: PeerId, 
+    account_id: T::AccountId
+  ) -> bool {
+    if !Self::is_model_and_subnet_node(subnet_id.clone(), account_id) {
       return false
     }
 
-    let model_peer_account_exists: bool = match ModelPeerAccount::<T>::try_get(model_id.clone(), peer_id) {
+    let subnet_node_account_exists: bool = match SubnetNodeAccount::<T>::try_get(subnet_id.clone(), peer_id) {
       Ok(_result) => true,
       Err(()) => false,
     };
 
-    return model_peer_account_exists
+    return subnet_node_account_exists
+  }
+
+  pub fn transition_idle_to_included() {
+
+  }
+
+  pub fn transition_included_to_submittable() {
+
+  }
+
+  pub fn transition_submittable_to_accountant() {
+
+  }
+
+  pub fn do_choose_validator_and_accountants(epoch: u32) {
+    for (subnet_id, _) in SubnetsData::<T>::iter() {
+
+    }
   }
 
   pub fn eth_into_gwei(

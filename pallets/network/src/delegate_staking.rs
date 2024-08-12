@@ -20,7 +20,7 @@ use super::*;
 impl<T: Config> Pallet<T> {
   pub fn do_add_delegate_stake(
     origin: T::RuntimeOrigin,
-    model_id: u32,
+    subnet_id: u32,
     hotkey: T::AccountId,
     delegate_stake_to_be_added: u128,
   ) -> DispatchResult {
@@ -33,9 +33,9 @@ impl<T: Config> Pallet<T> {
       Error::<T>::CouldNotConvertToBalance
     );
 
-    let account_delegate_stake_shares: u128 = AccountModelDelegateStakeShares::<T>::get(&account_id, model_id.clone());
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<T>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<T>::get(model_id.clone());
+    let account_delegate_stake_shares: u128 = AccountSubnetDelegateStakeShares::<T>::get(&account_id, subnet_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<T>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<T>::get(subnet_id.clone());
 
     // --- Get accounts current balance
     let account_delegate_stake_balance = Self::convert_to_balance(
@@ -83,7 +83,7 @@ impl<T: Config> Pallet<T> {
 
     // --- Mitigate inflation attack
     if total_model_delegated_stake_shares == 0 {
-      TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |mut n| *n += 1000);
+      TotalSubnetDelegateStakeShares::<T>::mutate(subnet_id.clone(), |mut n| *n += 1000);
       delegate_stake_to_be_added_as_shares = delegate_stake_to_be_added_as_shares.saturating_sub(1000);
     }
     
@@ -95,7 +95,7 @@ impl<T: Config> Pallet<T> {
 
     Self::increase_account_delegate_stake_shares(
       &account_id,
-      model_id, 
+      subnet_id, 
       delegate_stake_to_be_added,
       delegate_stake_to_be_added_as_shares,
     );
@@ -103,14 +103,14 @@ impl<T: Config> Pallet<T> {
     // Set last block for rate limiting
     Self::set_last_tx_block(&account_id, block);
 
-    Self::deposit_event(Event::DelegateStakeAdded(model_id, account_id, delegate_stake_to_be_added));
+    Self::deposit_event(Event::DelegateStakeAdded(subnet_id, account_id, delegate_stake_to_be_added));
 
     Ok(())
   }
 
   pub fn do_remove_delegate_stake(
     origin: T::RuntimeOrigin, 
-    model_id: u32,
+    subnet_id: u32,
     hotkey: T::AccountId,
     delegate_stake_shares_to_be_removed: u128,
     // delegate_stake_to_be_removed: u128,
@@ -123,7 +123,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::NotEnoughStakeToWithdraw
     );
 
-    let account_delegate_stake_shares: u128 = AccountModelDelegateStakeShares::<T>::get(&account_id, model_id.clone());
+    let account_delegate_stake_shares: u128 = AccountSubnetDelegateStakeShares::<T>::get(&account_id, subnet_id.clone());
 
     log::error!("delegate_stake_shares_to_be_removed {:?}", delegate_stake_shares_to_be_removed);
     log::error!("account_delegate_stake_shares       {:?}", account_delegate_stake_shares);
@@ -134,8 +134,8 @@ impl<T: Config> Pallet<T> {
       Error::<T>::NotEnoughStakeToWithdraw
     );
       
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<T>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<T>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<T>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<T>::get(subnet_id.clone());
 
     // --- Get accounts current balance
     let delegate_stake_to_be_removed = Self::convert_to_balance(
@@ -158,9 +158,9 @@ impl<T: Config> Pallet<T> {
     );
 
     // --- 7. We remove the balance from the hotkey.
-    Self::decrease_account_delegate_stake_shares(&account_id, model_id, delegate_stake_to_be_removed, delegate_stake_shares_to_be_removed);
+    Self::decrease_account_delegate_stake_shares(&account_id, subnet_id, delegate_stake_to_be_removed, delegate_stake_shares_to_be_removed);
 
-    let remaining_account_delegate_stake_shares: u128 = AccountModelDelegateStakeShares::<T>::get(&account_id, model_id);
+    let remaining_account_delegate_stake_shares: u128 = AccountSubnetDelegateStakeShares::<T>::get(&account_id, subnet_id);
     
     // --- 9. We add the balancer to the account_id.  If the above fails we will not credit this account_id.
     Self::add_balance_to_coldkey_account(&account_id, delegate_stake_to_be_added_as_currency.unwrap());
@@ -168,49 +168,49 @@ impl<T: Config> Pallet<T> {
     // Set last block for rate limiting
     Self::set_last_tx_block(&account_id, block);
 
-    Self::deposit_event(Event::DelegateStakeRemoved(model_id, account_id, delegate_stake_to_be_removed));
+    Self::deposit_event(Event::DelegateStakeRemoved(subnet_id, account_id, delegate_stake_to_be_removed));
 
     Ok(())
   }
 
   pub fn increase_account_delegate_stake_shares(
     account_id: &T::AccountId,
-    model_id: u32, 
+    subnet_id: u32, 
     amount: u128,
     shares: u128,
   ) {
-    // -- increase account model staking shares balance
-    AccountModelDelegateStakeShares::<T>::insert(
+    // -- increase account subnet staking shares balance
+    AccountSubnetDelegateStakeShares::<T>::insert(
       account_id,
-      model_id.clone(),
-      AccountModelDelegateStakeShares::<T>::get(account_id, model_id).saturating_add(shares),
+      subnet_id.clone(),
+      AccountSubnetDelegateStakeShares::<T>::get(account_id, subnet_id).saturating_add(shares),
     );
 
-    // -- increase total model delegate stake balance
-    TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |mut n| *n += amount);
+    // -- increase total subnet delegate stake balance
+    TotalSubnetDelegateStakeBalance::<T>::mutate(subnet_id.clone(), |mut n| *n += amount);
 
-    // -- increase total model delegate stake shares
-    TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |mut n| *n += shares);
+    // -- increase total subnet delegate stake shares
+    TotalSubnetDelegateStakeShares::<T>::mutate(subnet_id.clone(), |mut n| *n += shares);
   }
   
   pub fn decrease_account_delegate_stake_shares(
     account_id: &T::AccountId,
-    model_id: u32, 
+    subnet_id: u32, 
     amount: u128,
     shares: u128,
   ) {
-    // -- decrease account model staking shares balance
-    AccountModelDelegateStakeShares::<T>::insert(
+    // -- decrease account subnet staking shares balance
+    AccountSubnetDelegateStakeShares::<T>::insert(
       account_id,
-      model_id.clone(),
-      AccountModelDelegateStakeShares::<T>::get(account_id, model_id).saturating_sub(shares),
+      subnet_id.clone(),
+      AccountSubnetDelegateStakeShares::<T>::get(account_id, subnet_id).saturating_sub(shares),
     );
 
-    // -- increase total model delegate stake balance
-    TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |mut n| *n += amount);
+    // -- increase total subnet delegate stake balance
+    TotalSubnetDelegateStakeBalance::<T>::mutate(subnet_id.clone(), |mut n| *n += amount);
 
-    // -- decrease total model delegate stake shares
-    TotalModelDelegateStakeShares::<T>::mutate(model_id.clone(), |mut n| *n -= shares);
+    // -- decrease total subnet delegate stake shares
+    TotalSubnetDelegateStakeShares::<T>::mutate(subnet_id.clone(), |mut n| *n -= shares);
   }
 
   // fn can_remove_balance_from_coldkey_account(
@@ -251,11 +251,11 @@ impl<T: Config> Pallet<T> {
 
   /// Rewards are deposited here
   pub fn increase_delegated_stake(
-    model_id: u32,
+    subnet_id: u32,
     amount: u128,
   ) {
-    // -- increase total model delegate stake 
-    TotalModelDelegateStakeBalance::<T>::mutate(model_id.clone(), |mut n| *n += amount);
+    // -- increase total subnet delegate stake 
+    TotalSubnetDelegateStakeBalance::<T>::mutate(subnet_id.clone(), |mut n| *n += amount);
   }
 
   // pub fn add_balance_to_coldkey_account(
@@ -280,14 +280,14 @@ impl<T: Config> Pallet<T> {
   // }
 
   pub fn get_delegate_stake_balance(
-    model_id: u32,
+    subnet_id: u32,
     account_id: &T::AccountId,
   ) -> u128 {
     0
   }
 
   pub fn get_delegate_shares_balance(
-    model_id: u32,
+    subnet_id: u32,
     account_id: &T::AccountId,
   ) -> u128 {
     0

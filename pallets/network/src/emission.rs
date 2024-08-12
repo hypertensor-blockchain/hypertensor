@@ -25,26 +25,26 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		let mut total_stake: u128 = 0;
 		let max_stake_balance: u128 = MaxStakeBalance::<T>::get();
 
-		// *** 1. Get all models in-consensus and remove it afterwards using `take()`
-		let model_ids: Vec<u32> = ModelsInConsensus::<T>::take();
+		// *** 1. Get all subnets in-consensus and remove it afterwards using `take()`
+		let model_ids: Vec<u32> = SubnetsInConsensus::<T>::take();
 
-		// If there are no models in-consensus, return
+		// If there are no subnets in-consensus, return
 		if model_ids.len() == 0 {
 			return
 		}
 
-		// Model ID => Total Model Stake
-		// Used to get model weights in `get_model_emissions_weights()`
+		// Subnet ID => Total Subnet Stake
+		// Used to get subnet weights in `get_model_emissions_weights()`
 		let mut models_data: BTreeMap<u32, u128> = BTreeMap::new();
 
-		// *** 2. Get total stake sum of live models model peers in-consensus
-		// We iter with model_ids over `iter_values()` in order to initialize a BTreeMap with model_id as k1
-		for model_id in model_ids.iter() {
+		// *** 2. Get total stake sum of live subnets subnet peers in-consensus
+		// We iter with model_ids over `iter_values()` in order to initialize a BTreeMap with subnet_id as k1
+		for subnet_id in model_ids.iter() {
 			let mut total_model_stake: u128 = 0;
 
-			let total_model_stake: u128 = ModelPeerConsensusResults::<T>::iter_prefix_values(model_id.clone())
+			let total_model_stake: u128 = SubnetNodeConsensusResults::<T>::iter_prefix_values(subnet_id.clone())
 				.map(|x| {
-					let account_model_stake: u128 = AccountModelStake::<T>::get(x.account_id, model_id.clone());
+					let account_model_stake: u128 = AccountSubnetStake::<T>::get(x.account_id, subnet_id.clone());
 					// Only get up to max stake balance
 					if account_model_stake > max_stake_balance {
 						total_model_stake += max_stake_balance;
@@ -58,10 +58,10 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 			total_stake.saturating_accrue(total_model_stake);
 
-			models_data.insert(model_id.clone(), total_model_stake);
+			models_data.insert(subnet_id.clone(), total_model_stake);
 		}
 
-		// *** 3. If there is no total stake balance or models in-consensus
+		// *** 3. If there is no total stake balance or subnets in-consensus
 		// Then return
 		if total_stake == 0 {
 			return
@@ -74,8 +74,8 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			return
 		}
 
-		// If ModelPeerConsensusResults has no values it will be returned during `if total_stake == 0` above
-		let consensus_len = ModelPeerConsensusResults::<T>::iter().count();
+		// If SubnetNodeConsensusResults has no values it will be returned during `if total_stake == 0` above
+		let consensus_len = SubnetNodeConsensusResults::<T>::iter().count();
 
 		// if consensus_len == 0 {
 		// 	return
@@ -86,7 +86,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 
 		// *** 5. Ensure divisible by percentage factor
-		// Peer can have a minimum of 0.01% of rewards on both score and stake balance
+		// Node can have a minimum of 0.01% of rewards on both score and stake balance
 		// We ensure this is divisible by how many peers there are
 		// This isn't perfect but it's a quick way to ensure rewards are distributed properly
 		// without requiring to check values after rewards are distributed
@@ -102,42 +102,42 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		// *** 7. Weight of rewards towards score sum
 		let score_reward_weight = Self::PERCENTAGE_FACTOR.saturating_sub(stake_reward_weight);
 
-		// *** 8. Get model weights based on excess distribution algorithm
+		// *** 8. Get subnet weights based on excess distribution algorithm
 		let models_data: Vec<(u32, u128)> = Self::get_model_emissions_weights(models_data, total_stake);
 
-		// *** 9. If there are no model weights, don't run emissions
+		// *** 9. If there are no subnet weights, don't run emissions
 		if models_data.len() == 0 {
 			return
 		} 
 		// else {
-			// Ensure model weights sum isn't above PERCENTAGE_FACTOR
+			// Ensure subnet weights sum isn't above PERCENTAGE_FACTOR
 		// }
 
 		// -- Track emissions rewarded
 		let mut total_emissions_on_epoch: u128 = 0;		
 
-		// *** 10. Iter each model that clear minimum weight and distribute rewards to model validators
-		for model in models_data.iter() {
-			let model_id: u32 = model.0;
-			let model_weight: u128 = model.1;
+		// *** 10. Iter each subnet that clear minimum weight and distribute rewards to subnet validators
+		for subnet in models_data.iter() {
+			let subnet_id: u32 = subnet.0;
+			let model_weight: u128 = subnet.1;
 
 			// Redundant
 			if model_weight == 0 {
-				let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
+				let _ = SubnetNodeConsensusResults::<T>::clear_prefix(subnet_id.clone(), u32::MAX, None);
 				continue
 			}
 
 			// *** 11. Get all 
 			//			a. Accounts submitted, in-consensus, stake balances, and scores
-			//			b. The sum of in-consensus model stake balances and scorse
+			//			b. The sum of in-consensus subnet stake balances and scorse
 			// 
 			// Cannot use drain_prefix with mapping so we clear after
 			//
 			let mut total_model_stake_sum: u128 = 0;
 			let mut scores_sum: u128 = 0;
-			let accounts: Vec<(T::AccountId, u128, u128)> = ModelPeerConsensusResults::<T>::iter_prefix_values(model_id.clone())
+			let accounts: Vec<(T::AccountId, u128, u128)> = SubnetNodeConsensusResults::<T>::iter_prefix_values(subnet_id.clone())
 				.map(|x| {
-					let mut account_model_stake_balance: u128 = match AccountModelStake::<T>::try_get(&x.account_id, model_id.clone()) {
+					let mut account_model_stake_balance: u128 = match AccountSubnetStake::<T>::try_get(&x.account_id, subnet_id.clone()) {
 						Ok(balance) => balance,
 						Err(()) => 0,
 					};
@@ -161,12 +161,12 @@ impl<T: Config + pallet::Config> Pallet<T> {
 
 			// *** 13. Reset storage for next epoch
 			// to-do: check if all cleared
-			let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
+			let _ = SubnetNodeConsensusResults::<T>::clear_prefix(subnet_id.clone(), u32::MAX, None);
 
-			// *** 14. Rewards to distribute to model peers
+			// *** 14. Rewards to distribute to subnet peers
 			let model_emissions: u128 = Self::percent_mul(total_vault_balance, model_weight);
 
-			// *** 15. Return if model weight is zero 
+			// *** 15. Return if subnet weight is zero 
 			if model_emissions == 0 {
 				continue
 			}
@@ -185,7 +185,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 					continue
 				}
 	
-				// *** 19. Percent of stake peer has in model stake
+				// *** 19. Percent of stake peer has in subnet stake
 				// If under 0.01% it will return zero
 				// This is checked later in `account_avg_weight`
 				let account_stake_percentage: u128 = Self::percent_div(
@@ -210,7 +210,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 					continue
 				}
 	
-				// *** 22. Get accounts total emissions on this model
+				// *** 22. Get accounts total emissions on this subnet
 				let account_total_emissions: u128 = Self::percent_mul(model_emissions, account_avg_weight);
 				
 				// Redundant
@@ -219,14 +219,14 @@ impl<T: Config + pallet::Config> Pallet<T> {
 				}
 
 				// *** 23. Increase accounts staking balances
-				// Increase account model stake
+				// Increase account subnet stake
 				// Increase account total stake
-				// Increase model stake
+				// Increase subnet stake
 				// Increase total stake
 				// note: there is no rate limiter on this function
 				Self::increase_account_stake(
 					&account_id,
-					model_id.clone(), 
+					subnet_id.clone(), 
 					account_total_emissions,
 				);
 
@@ -242,10 +242,10 @@ impl<T: Config + pallet::Config> Pallet<T> {
 	pub fn generate_emissionsf(block: u64) {
 		let mut total_stake: u128 = 0;
 
-		// *** 1. Get all models in-consensus and remove it afterwards using `take()`
-		let model_ids: Vec<u32> = ModelsInConsensus::<T>::take();
+		// *** 1. Get all subnets in-consensus and remove it afterwards using `take()`
+		let model_ids: Vec<u32> = SubnetsInConsensus::<T>::take();
 
-		// If there are no models in-consensus, return
+		// If there are no subnets in-consensus, return
 		if model_ids.len() == 0 {
 			return
 		}
@@ -254,12 +254,12 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		let stake_reward_weight: u128 = StakeRewardWeight::<T>::get();
 		let score_reward_weight = Self::PERCENTAGE_FACTOR.saturating_sub(stake_reward_weight);
 
-		for model_id in model_ids.iter() {
+		for subnet_id in model_ids.iter() {
 			let mut total_model_stake_sum: u128 = 0;
 			let mut scores_sum: u128 = 0;
-			let accounts: Vec<(T::AccountId, u128, u128)> = ModelPeerConsensusResults::<T>::iter_prefix_values(model_id.clone())
+			let accounts: Vec<(T::AccountId, u128, u128)> = SubnetNodeConsensusResults::<T>::iter_prefix_values(subnet_id.clone())
 				.map(|x| {
-					let mut account_model_stake_balance: u128 = match AccountModelStake::<T>::try_get(&x.account_id, model_id.clone()) {
+					let mut account_model_stake_balance: u128 = match AccountSubnetStake::<T>::try_get(&x.account_id, subnet_id.clone()) {
 						Ok(balance) => balance,
 						Err(()) => 0,
 					};
@@ -280,9 +280,9 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			}
 			
 			// *** Reset storage for next epoch
-			let _ = ModelPeerConsensusResults::<T>::clear_prefix(model_id.clone(), u32::MAX, None);
+			let _ = SubnetNodeConsensusResults::<T>::clear_prefix(subnet_id.clone(), u32::MAX, None);
 
-			// *** Rewards to distribute to model peers based on stake to the specific model
+			// *** Rewards to distribute to subnet peers based on stake to the specific subnet
 			let epoch_rewards: u128 = Self::get_epoch_rewards(block, total_model_stake_sum);
 
 			// *** 17. Iter each account in-consensus
@@ -312,7 +312,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 					continue
 				}
 	
-				// *** 22. Get accounts total emissions on this model
+				// *** 22. Get accounts total emissions on this subnet
 				let account_total_emissions: u128 = Self::percent_mul(epoch_rewards, account_avg_weight);
 				
 				// Redundant
@@ -321,14 +321,14 @@ impl<T: Config + pallet::Config> Pallet<T> {
 				}
 
 				// *** 23. Increase accounts staking balances
-				// Increase account model stake
+				// Increase account subnet stake
 				// Increase account total stake
-				// Increase model stake
+				// Increase subnet stake
 				// Increase total stake
 				// note: there is no rate limiter on this function
 				Self::increase_account_stake(
 					&account_id,
-					model_id.clone(), 
+					subnet_id.clone(), 
 					account_total_emissions,
 				);
 			}
@@ -339,43 +339,43 @@ impl<T: Config + pallet::Config> Pallet<T> {
 	//
 	// Weights are as `model_stake_balance / total_stake_balance`
 	//
-	// No 1 model can have over MaxModelRewardsWeight e.g. 50% of total rewards
-	// If one does, we balance and distribute the excess in proportion to the other models
+	// No 1 subnet can have over MaxSubnetRewardsWeight e.g. 50% of total rewards
+	// If one does, we balance and distribute the excess in proportion to the other subnets
 	//
-	// Ensures model weights don't surpass the max weight based on MaxModelRewardsWeight
-	// Any excess of weights from models is distributed over other models weights based 
-	// on the total sum of underweight model weights.
+	// Ensures subnet weights don't surpass the max weight based on MaxSubnetRewardsWeight
+	// Any excess of weights from subnets is distributed over other subnets weights based 
+	// on the total sum of underweight subnet weights.
 	//
-	// Returns model_id and model weight - weight will be rounded down
+	// Returns subnet_id and subnet weight - weight will be rounded down
 	//
 	// The weights are used to determine how much of the stake vault rewards are to 
-	// be distributed to each model
+	// be distributed to each subnet
 	//
-	/// `models_data` is Model ID => total model stake balance
-	/// `total_stake` is the total amount staked of live models
+	/// `models_data` is Subnet ID => total subnet stake balance
+	/// `total_stake` is the total amount staked of live subnets
 	fn get_model_emissions_weights(models_data: BTreeMap<u32, u128>, total_stake: u128) -> Vec<(u32, u128)> {
 		// push eligible data into models_data
 		let mut model_weights_data: Vec<(u32, u128)> = Vec::new();
 
 		// We first get weights as u128 in order to sort percentages
-		for (model_id, total_model_stake) in models_data.iter() {
-			// Model must have a minimum of 0.01% staked versus the total staked to be included
+		for (subnet_id, total_model_stake) in models_data.iter() {
+			// Subnet must have a minimum of 0.01% staked versus the total staked to be included
 			// All percentages are rounded down when they are odd numbers
 			let model_stake_percentage = Self::percent_div(*total_model_stake, total_stake);
 
-			// Model peers must collectly keep a minimum required stake percentage of 0.01%
+			// Subnet peers must collectly keep a minimum required stake percentage of 0.01%
 			if model_stake_percentage == 0 {
-				ModelConsensusEpochsErrors::<T>::mutate(model_id.clone(), |n: &mut u32| *n += 1);
+				SubnetConsensusEpochsErrors::<T>::mutate(subnet_id.clone(), |n: &mut u32| *n += 1);
 			}
 
 			if model_stake_percentage != 0 {
-				model_weights_data.push((*model_id, model_stake_percentage))
+				model_weights_data.push((*subnet_id, model_stake_percentage))
 			}
 		}
 		
 		let model_weights_data_len = model_weights_data.len();
 
-		// If there is no model weights data
+		// If there is no subnet weights data
 		// Return empty Vec
 		if model_weights_data_len == 0 {
 			return Vec::<(u32, u128)>::new()
@@ -386,12 +386,12 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			b.1.cmp(&a.1)
     });
 		
-		// If there is 1 model do not run any computations and return now
+		// If there is 1 subnet do not run any computations and return now
 		if model_weights_data_len <= 1 {
 			return model_weights_data;
 		}
 
-		// Get total weight of models
+		// Get total weight of subnets
 		// This doesn't need to be 100.0, can be above or below 100.0 to perform calculations
 		//
 		// It is likely the initial_weights_sum will be under 100.0 if numbers aren't directly divisible by 100.0
@@ -402,19 +402,19 @@ impl<T: Config + pallet::Config> Pallet<T> {
 			initial_weights_sum += data.1;
 		}
 
-		let mut target_weight: u128 = MaxModelRewardsWeight::<T>::get();
+		let mut target_weight: u128 = MaxSubnetRewardsWeight::<T>::get();
 
 		// Make sure math is possible
 		// if not update the target_weight
 		//
 		// Ensure excess weight can be distributed while remaining the sum and not going overweight
 		//
-		// e.g. If target weight is 10% and there are 2 models
+		// e.g. If target weight is 10% and there are 2 subnets
 		//			• The minimum weight would be 50%
 		//			• Assuming [50,50]
 		//				• If kept 10%, the sum will not equal the initial_weights_sum
 		//					• The excess would be 80 on index 0, and index 0 and 1 would decrease to 10. Thus summing to 20
-		// e.g. If target weight is 10% and there are 3 models
+		// e.g. If target weight is 10% and there are 3 subnets
 		//			• The minimum weight would be 33.33%
 		//			• Assuming [40,40,20]
 		//				• If kept 10%, the sum will not equal the initial_weights_sum
@@ -428,8 +428,8 @@ impl<T: Config + pallet::Config> Pallet<T> {
 		// The target number the model_stake_percentage cannot be greater than
 		let target_num: u128 = Self::percent_mul(initial_weights_sum, target_weight);
 		
-		// If a model has over max weight
-    // distribute that to the other models
+		// If a subnet has over max weight
+    // distribute that to the other subnets
     // based on their proportion of remaining weight
 		let mut excess = 0;
     for data in model_weights_data.iter() {
@@ -470,7 +470,7 @@ impl<T: Config + pallet::Config> Pallet<T> {
 }
 
 // @to-do: compute the rewards from the stake rewards vault to give on epoch based on ideal stake
-//				 based on total model, peers, and eligible stake balance
-pub fn compute_rewards(total_model_peers: u128, total_stake: u128, total_vault_balance: u128) -> u128 {
+//				 based on total subnet, peers, and eligible stake balance
+pub fn compute_rewards(total_subnet_nodes: u128, total_stake: u128, total_vault_balance: u128) -> u128 {
 	total_vault_balance
 }

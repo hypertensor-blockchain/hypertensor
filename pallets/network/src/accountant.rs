@@ -14,26 +14,26 @@
 // limitations under the License.
 
 use super::*;
-use frame_support::traits::Randomness;
+// use frame_support::traits::Randomness;
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use rand::RngCore;
 
 impl<T: Config> Pallet<T> {
-  pub fn try_submit_accountant_data(
+  pub fn do_submit_accountant_data(
     accountant: T::AccountId,
-    model_id: u32,
-    data: Vec<AccountantDataPeerParams>,
+    subnet_id: u32,
+    data: Vec<AccountantDataNodeParams>,
   ) -> DispatchResult {
     // --- Ensure is epochs accountant
-    // let current_accountant: T::AccountId = CurrentAccountant::<T>::get(model_id.clone());
+    // let current_accountant: T::AccountId = CurrentAccountant::<T>::get(subnet_id.clone());
 
     // New accountants are chosen at the beginning of each epoch, if the previous accountant doesn't submit 
     // data by the end of the epoch, then they will get errors when the new accountants are chosen. New accountants
     // cannot be the last accountants
 
     // --- Ensure is epochs accountant
-    let mut current_accountants: BTreeMap<T::AccountId, bool> = CurrentAccountant2::<T>::get(model_id.clone());
+    let mut current_accountants: BTreeMap<T::AccountId, bool> = CurrentAccountant2::<T>::get(subnet_id.clone());
     ensure!(
       current_accountants.contains_key(&accountant.clone()),
       Error::<T>::NotAccountant
@@ -56,25 +56,25 @@ impl<T: Config> Pallet<T> {
     // );
 
     let data_len = data.len();
-    let total_model_peers: u32 = TotalModelPeers::<T>::get(model_id.clone());
+    let total_subnet_nodes: u32 = TotalSubnetNodes::<T>::get(subnet_id.clone());
 
-    // --- Ensure length of data does not exceed total model peers of model ID
+    // --- Ensure length of data does not exceed total subnet peers of subnet ID
     ensure!(
-      data_len as u32 <= total_model_peers && data_len as u32 > 0,
+      data_len as u32 <= total_subnet_nodes && data_len as u32 > 0,
       Error::<T>::InvalidAccountantData
     );
 
     // --- Update to data submitted
     current_accountants.insert(accountant.clone(), true);
-    CurrentAccountant2::<T>::insert(model_id.clone(), current_accountants);
+    CurrentAccountant2::<T>::insert(subnet_id.clone(), current_accountants);
     
-    let accountant_data_index: u32 = AccountantDataCount::<T>::get(model_id.clone());
+    let accountant_data_index: u32 = AccountantDataCount::<T>::get(subnet_id.clone());
 
     let block: u64 = Self::get_current_block_as_u64();
     let epoch: u64 = block / EpochLength::<T>::get();
 
     AccountantData::<T>::insert(
-      model_id.clone(),
+      subnet_id.clone(),
       accountant_data_index.clone(),
       AccountantDataParams {
         accountant,
@@ -90,37 +90,37 @@ impl<T: Config> Pallet<T> {
   pub fn check_and_choose_accountant() {
     let block: u64 = Self::get_current_block_as_u64();
     let epoch_length: u64 = EpochLength::<T>::get();
-    let min_required_peer_accountant_epochs: u64 = MinRequiredPeerAccountantEpochs::<T>::get();
-    let min_model_peers: u32 = MinModelPeers::<T>::get();
+    let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
+    let min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
 
     // Predictable rand generator for choosing random accountant 
     let mut small_rng = SmallRng::seed_from_u64(block);
 
-    for (model_id, data) in ModelsData::<T>::iter() {
-			let model_activated: bool = match ModelActivated::<T>::try_get(data.path) {
+    for (subnet_id, data) in SubnetsData::<T>::iter() {
+			let model_activated: bool = match SubnetActivated::<T>::try_get(data.path) {
 				Ok(is_active) => is_active,
 				Err(()) => false,
 			};
       if !model_activated {
-        Self::clear_accountants(model_id);
+        Self::clear_accountants(subnet_id);
         continue;
       }
 
-      // We don't check if model has errors because it is up to the users to remove that model
-      // If a model surpasses max errors, not rewards are emitted. Users of this subnet must remove
-      // the model from the network.
+      // We don't check if subnet has errors because it is up to the users to remove that subnet
+      // If a subnet surpasses max errors, not rewards are emitted. Users of this subnet must remove
+      // the subnet from the network.
 
-      // --- Check model peers count
-      let model_peers_count = TotalModelPeers::<T>::get(model_id);
-      // --- If not min model peers count then accountant isn't needed
-      if model_peers_count < min_model_peers {
-        Self::clear_accountants(model_id);
+      // --- Check subnet peers count
+      let subnet_nodes_count = TotalSubnetNodes::<T>::get(subnet_id);
+      // --- If not min subnet peers count then accountant isn't needed
+      if subnet_nodes_count < min_subnet_nodes {
+        Self::clear_accountants(subnet_id);
         continue;
       }
 
       // --- Check accountant submitted data
-      // let current_accountant = CurrentAccountant::<T>::get(model_id.clone());
-      let mut current_accountants: BTreeMap<T::AccountId, bool> = CurrentAccountant2::<T>::get(model_id);
+      // let current_accountant = CurrentAccountant::<T>::get(subnet_id.clone());
+      let mut current_accountants: BTreeMap<T::AccountId, bool> = CurrentAccountant2::<T>::get(subnet_id);
 
       // --- Give the accountant node a penalty if they didn't submit accountant data
       if !current_accountants.is_empty() {
@@ -139,12 +139,12 @@ impl<T: Config> Pallet<T> {
         }  
       }
 
-      // let accountant_data_index: u32 = AccountantDataCount::<T>::get(model_id);
+      // let accountant_data_index: u32 = AccountantDataCount::<T>::get(subnet_id);
       // // --- Check accountant data count
       // // If current accountant didn't submit data, increase penalty count
       // // If they did submit data, others can propose the accountant is dishonest
-      // // let accountant_data = AccountantData::<T>::get(model_id.clone(), accountant_data_index);
-			// match AccountantData::<T>::try_get(model_id.clone(), accountant_data_index) {
+      // // let accountant_data = AccountantData::<T>::get(subnet_id.clone(), accountant_data_index);
+			// match AccountantData::<T>::try_get(subnet_id.clone(), accountant_data_index) {
 			// 	Ok(_) |
 			// 	Err(()) => {
       //     AccountPenaltyCount::<T>::mutate(
@@ -155,17 +155,17 @@ impl<T: Config> Pallet<T> {
 			// };
 
       // --- Get random accountant
-      let account_ids: Vec<T::AccountId> = Self::get_eligible_model_peers_accounts(
-        model_id,
+      let account_ids: Vec<T::AccountId> = Self::get_eligible_subnet_nodes_accounts(
+        subnet_id,
         block,
         epoch_length,
         min_required_peer_accountant_epochs
       );
 
-      // --- If there are no eligible accountants, skip to the next model after clearing
+      // --- If there are no eligible accountants, skip to the next subnet after clearing
       let accountant: Option<T::AccountId> = Self::get_random_accountant(
         &mut small_rng,
-        model_id,
+        subnet_id,
         block,
         epoch_length,
         min_required_peer_accountant_epochs,
@@ -182,45 +182,45 @@ impl<T: Config> Pallet<T> {
       // --- Insert new accountants only if they exist
       if let Some(accountant) = accountant {
         current_accountants.insert(accountant, false);
-        CurrentAccountant2::<T>::insert(model_id, current_accountants);
+        CurrentAccountant2::<T>::insert(subnet_id, current_accountants);
         
         // --- Increase accountant data count
-        AccountantDataCount::<T>::insert(model_id, AccountantDataCount::<T>::get(model_id) + 1);
+        AccountantDataCount::<T>::insert(subnet_id, AccountantDataCount::<T>::get(subnet_id) + 1);
       }
     }
   }
 
-  fn clear_accountants(model_id: u32) {
-    let mut current_accountants: BTreeMap<T::AccountId, bool> = CurrentAccountant2::<T>::get(model_id);
+  fn clear_accountants(subnet_id: u32) {
+    let mut current_accountants: BTreeMap<T::AccountId, bool> = CurrentAccountant2::<T>::get(subnet_id);
     // --- Remove the current account if exists
     if !current_accountants.is_empty() {
       current_accountants.clear();
-      CurrentAccountant2::<T>::insert(model_id, current_accountants);
+      CurrentAccountant2::<T>::insert(subnet_id, current_accountants);
     }
   }
 
   // Get random account
   fn get_random_accountant(
     small_rng: &mut SmallRng,
-    model_id: u32,
+    subnet_id: u32,
     block: u64,
     epoch_length: u64,
     min_required_peer_accountant_epochs: u64,
     previous_accountants: BTreeMap<T::AccountId, bool>
   ) -> Option<T::AccountId> {
     // --- Get accountant
-    let account_ids: Vec<T::AccountId> = Self::get_eligible_model_peers_accounts(
-      model_id,
+    let account_ids: Vec<T::AccountId> = Self::get_eligible_subnet_nodes_accounts(
+      subnet_id,
       block,
       epoch_length,
       min_required_peer_accountant_epochs
     );
 
 
-    let mut is_prev_accountant = true;
+    let mut is_accountant = true;
 
 
-    // let new_accountant: &T::AccountId = while is_prev_accountant {
+    // let new_accountant: &T::AccountId = while is_accountant {
     //   // --- Get random number within the amount of eligible peers
     //   let rand_num = small_rng.next_u32();
     //   let rand_index = rand_num % (account_ids.len() as u32 + 1);
@@ -229,7 +229,7 @@ impl<T: Config> Pallet<T> {
     //   let new_accountant: &T::AccountId = &account_ids[rand_index as usize];
       
     //   if !previous_accountants.contains_key(&new_accountant) {
-    //     is_prev_accountant = false;
+    //     is_accountant = false;
     //     return new_accountant.clone()
     //   }
     // };
@@ -240,7 +240,7 @@ impl<T: Config> Pallet<T> {
     
     let mut new_accountant: &T::AccountId = &account_ids[0];
 
-    while is_prev_accountant {
+    while is_accountant {
       // --- Get random number within the amount of eligible peers
       let rand_num = small_rng.next_u32();
       let rand_index = rand_num % (account_ids.len() as u32 + 1);
@@ -249,59 +249,59 @@ impl<T: Config> Pallet<T> {
       let new_accountant: &T::AccountId = &account_ids[rand_index as usize];
       
       if !previous_accountants.contains_key(&new_accountant) {
-        is_prev_accountant = false;
+        is_accountant = false;
       }
     };
     
     Some(new_accountant.clone())
   }
 
-  fn get_round_robin_accountant(
-    model_id: u32,
-    block: u64,
-    epoch_length: u64,
-    min_required_peer_accountant_epochs: u64,
-  ) -> Option<T::AccountId> {
-    // --- Get accountants in model_id list for round robin
-    // let mut accountants: Vec<T::AccountId> = Accountants::<T>::get(model_id.clone());
-    let mut accountants: Vec<T::AccountId> = Vec::new();
+  // fn get_round_robin_accountant(
+  //   subnet_id: u32,
+  //   block: u64,
+  //   epoch_length: u64,
+  //   min_required_peer_accountant_epochs: u64,
+  // ) -> Option<T::AccountId> {
+  //   // --- Get accountants in subnet_id list for round robin
+  //   // let mut accountants: Vec<T::AccountId> = Accountants::<T>::get(subnet_id.clone());
+  //   let mut accountants: Vec<T::AccountId> = Vec::new();
 
-    // --- Get accountant
-    let account_ids: Vec<T::AccountId> = Self::get_eligible_model_peers_accounts(
-      model_id.clone(),
-      block,
-      epoch_length,
-      min_required_peer_accountant_epochs
-    );
+  //   // --- Get accountant
+  //   let account_ids: Vec<T::AccountId> = Self::get_eligible_subnet_nodes_accounts(
+  //     subnet_id.clone(),
+  //     block,
+  //     epoch_length,
+  //     min_required_peer_accountant_epochs
+  //   );
 
-    let accountants_len = account_ids.len();
-    if accountants_len == 0 {
-      return None;
-    }
+  //   let accountants_len = account_ids.len();
+  //   if accountants_len == 0 {
+  //     return None;
+  //   }
 
-    for account_id in account_ids.into_iter() {
-      if !accountants.contains(&account_id) {
-        // accountants.insert(account_id);
-        accountants.push(account_id);
-      }
-    }
+  //   for account_id in account_ids.into_iter() {
+  //     if !accountants.contains(&account_id) {
+  //       // accountants.insert(account_id);
+  //       accountants.push(account_id);
+  //     }
+  //   }
 
-    // Accountants::<T>::insert(model_id.clone(), accountants);
+  //   // Accountants::<T>::insert(subnet_id.clone(), accountants);
 
-    let accountants_len = accountants.len();
+  //   let accountants_len = accountants.len();
 
-    // We don't pop accountants because they are removed from the accountants storage element when they are removed
-    let mut previous_index = 0;
+  //   // We don't pop accountants because they are removed from the accountants storage element when they are removed
+  //   let mut previous_index = 0;
 
-    // If the previous accountants index less than the length of the accountants, increase by one
-    // Otherwise, start at zero
-    if previous_index < accountants_len {
-      previous_index += 1;      
-    }
+  //   // If the previous accountants index less than the length of the accountants, increase by one
+  //   // Otherwise, start at zero
+  //   if previous_index < accountants_len {
+  //     previous_index += 1;      
+  //   }
 
-    let accountant = accountants.get(previous_index);
-    Some(accountant.unwrap().clone())
-  }
+  //   let accountant = accountants.get(previous_index);
+  //   Some(accountant.unwrap().clone())
+  // }
 
   pub fn clean_accountant_data() {
 

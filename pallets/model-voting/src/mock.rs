@@ -39,7 +39,7 @@ frame_support::construct_runtime!(
     System: system,
     Balances: pallet_balances,
     Network: pallet_network,
-    ModelVoting: pallet_model_voting,
+    SubnetVoting: pallet_model_voting,
 	}
 );
 
@@ -141,7 +141,7 @@ parameter_types! {
 impl Config for Test {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ModelVote = Network;
+	type SubnetVote = Network;
 	type Currency = Balances;
 	type MaxActivateProposals = ConstU32<32>;
 	type MaxDeactivateProposals = ConstU32<32>;

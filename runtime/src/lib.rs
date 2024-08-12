@@ -323,24 +323,24 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
-// Configure the pallet network.
-parameter_types! {
-	pub const NetworkInitialBondsMovingAverage: u64 = 900_000;
-	pub const NetworkInitialMaxAllowedUids: u16 = 4096;
-	pub const NetworkInitialIssuance: u64 = 0;
-	pub const NetworkInitialEmissionValue: u16 = 0;
-	pub const NetworkInitialMaxAllowedValidators: u16 = 128;
-	pub const NetworkInitialBurn: u64 = 1_000_000_000; // 1 tao
-	pub const NetworkInitialMinBurn: u64 = 1_000_000_000; // 1 tao
-	pub const NetworkInitialMaxBurn: u64 = 100_000_000_000; // 100 tao
-	// pub const NetworkInitialTxRateLimit: u64 = 1000;
-	pub const NetworkInitialMaxRegistrationsPerBlock: u16 = 1;
-	pub const NetworkInitialMinLockCost: u64 = 1_000_000_000_000; // 1000 TAO
-	pub const NetworkInitialModelLimit: u16 = 12;
-	pub const NetworkInitialModelPeerLimit: u16 = 12;
-	pub const NetworkInitialNetworkRateLimit: u64 = 1 * 7200;
-	pub const NetworkInitialStringLimit: u32 = 1000;
-}
+// // Configure the pallet network.
+// parameter_types! {
+// 	pub const NetworkInitialBondsMovingAverage: u64 = 900_000;
+// 	pub const NetworkInitialMaxAllowedUids: u16 = 4096;
+// 	pub const NetworkInitialIssuance: u64 = 0;
+// 	pub const NetworkInitialEmissionValue: u16 = 0;
+// 	pub const NetworkInitialMaxAllowedValidators: u16 = 128;
+// 	pub const NetworkInitialBurn: u64 = 1_000_000_000; // 1 tao
+// 	pub const NetworkInitialMinBurn: u64 = 1_000_000_000; // 1 tao
+// 	pub const NetworkInitialMaxBurn: u64 = 100_000_000_000; // 100 tao
+// 	// pub const NetworkInitialTxRateLimit: u64 = 1000;
+// 	pub const NetworkInitialMaxRegistrationsPerBlock: u16 = 1;
+// 	pub const NetworkInitialMinLockCost: u64 = 1_000_000_000_000; // 1000 TAO
+// 	pub const NetworkInitialModelLimit: u16 = 12;
+// 	pub const NetworkInitialSubnetNodeLimit: u16 = 12;
+// 	pub const NetworkInitialNetworkRateLimit: u64 = 1 * 7200;
+// 	pub const NetworkInitialStringLimit: u32 = 1000;
+// }
 
 // authority
 pub struct AuraAccountAdapter;
@@ -378,7 +378,7 @@ impl pallet_rewards::Config for Runtime {
 impl pallet_admin::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NetworkAdminInterface = Network;
-	type ModelVotingAdminInterface = ModelVoting;
+	type SubnetVotingAdminInterface = SubnetVoting;
 }
 
 // scheduler
@@ -606,7 +606,7 @@ parameter_types! {
 impl pallet_model_voting::Config for Runtime {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ModelVote = Network;
+	type SubnetVote = Network;
 	type Currency = Balances;
 	type MaxActivateProposals = ConstU32<32>;
 	type MaxDeactivateProposals = ConstU32<32>;
@@ -636,10 +636,10 @@ construct_runtime!(
 		Preimage: pallet_preimage,
 		// Referenda: pallet_referenda,
 		// ConvictionVoting: pallet_conviction_voting,
-		// ConvictionModelVoting: pallet_model_voting_v2,
+		// ConvictionSubnetVoting: pallet_model_voting_v2,
 		Network: pallet_network,
 		Admin: pallet_admin,
-		ModelVoting: pallet_model_voting,
+		SubnetVoting: pallet_model_voting,
 	}
 );
 
@@ -687,7 +687,7 @@ mod benches {
 		[pallet_grandpa, Grandpa]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_model_voting, ModelVoting]
+		[pallet_model_voting, SubnetVoting]
 		[pallet_network, Network]
 	);
 }
@@ -861,20 +861,20 @@ impl_runtime_apis! {
 	}
 
 	impl network_custom_rpc_runtime_api::NetworkRuntimeApi<Block> for Runtime {
-		fn get_model_peers(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers(model_id);
+		fn get_subnet_nodes(model_id: u32) -> Vec<u8> {
+			let result = Network::get_subnet_nodes(model_id);
 			result.encode()
 		}
-		fn get_model_peers_included(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_included(model_id);
+		fn get_subnet_nodes_included(model_id: u32) -> Vec<u8> {
+			let result = Network::get_subnet_nodes_included(model_id);
 			result.encode()
 		}
-		fn get_model_peers_submittable(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_submittable(model_id);
+		fn get_subnet_nodes_submittable(model_id: u32) -> Vec<u8> {
+			let result = Network::get_subnet_nodes_submittable(model_id);
 			result.encode()
 		}
-		fn get_model_peers_model_unconfirmed_count(model_id: u32) -> u32 {
-			let result = Network::get_model_peers_model_unconfirmed_count(model_id);
+		fn get_subnet_nodes_model_unconfirmed_count(model_id: u32) -> u32 {
+			let result = Network::get_subnet_nodes_model_unconfirmed_count(model_id);
 			result
 			// result.encode()
 		}

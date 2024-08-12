@@ -99,7 +99,7 @@ pub mod pallet {
     BlockReward {
       block_author: T::AccountId,
       validator_reward: BalanceOf<T>,
-      model_peers_reward: BalanceOf<T>,
+      subnet_nodes_reward: BalanceOf<T>,
     },
 
     SetValidatorRewardPercent(u32),
@@ -160,16 +160,16 @@ impl<T: Config> Pallet<T> {
     let validator_percent = Perbill::from_rational(ValidatorRewardPercent::<T>::get(), 100 as u32);
     let validator_reward = validator_percent * subsidy;
 
-    let model_peers_reward = subsidy - validator_reward;
+    let subnet_nodes_reward = subsidy - validator_reward;
 
-    T::IncreaseStakeVault::increase_stake_vault(model_peers_reward.saturated_into::<u128>());
+    T::IncreaseStakeVault::increase_stake_vault(subnet_nodes_reward.saturated_into::<u128>());
 
     T::Currency::deposit_creating(&block_author, validator_reward);
 
     Self::deposit_event(Event::BlockReward {
       block_author,
       validator_reward,
-      model_peers_reward
+      subnet_nodes_reward
     });
   }
 

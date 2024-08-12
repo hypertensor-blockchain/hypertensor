@@ -142,7 +142,7 @@ parameter_types! {
 impl pallet_model_voting::Config for Test {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ModelVote = Network;
+	type SubnetVote = Network;
 	type Currency = Balances;
 	type MaxActivateProposals = ConstU32<32>;
 	type MaxDeactivateProposals = ConstU32<32>;
@@ -154,7 +154,7 @@ impl pallet_model_voting::Config for Test {
 impl Config for Test {
 	type RuntimeEvent = RuntimeEvent;
   type NetworkAdminInterface = Network;
-  type ModelVotingAdminInterface = ModelVoting;
+  type SubnetVotingAdminInterface = ModelVoting;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

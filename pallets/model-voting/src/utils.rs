@@ -5,13 +5,13 @@ impl<T: Config> Pallet<T> {
   pub fn is_activation_proposal_ok(
     account_id: T::AccountId,
     path: Vec<u8>, 
-    model_peers: Vec<ModelPeer<T::AccountId>>,
+    subnet_nodes: Vec<SubnetNode<T::AccountId>>,
   ) -> bool {
-    // Check path doesn't already exist in Network or ModelVoting
+    // Check path doesn't already exist in Network or SubnetVoting
     // If it doesn't already exist, then it has either been not proposed or deactivated
     ensure!(
-      !T::ModelVote::get_model_path_exist(path.clone()),
-      Error::<T>::ModelPathExists
+      !T::SubnetVote::get_model_path_exist(path.clone()),
+      Error::<T>::SubnetPathExists
     );
 
     // // Ensure can propose new model path
@@ -25,7 +25,7 @@ impl<T: Config> Pallet<T> {
     // );
 
     // // Ensure account has enough balance to pay cost of model initialization
-    // let model_initialization_cost = T::ModelVote::get_model_initialization_cost();
+    // let model_initialization_cost = T::SubnetVote::get_model_initialization_cost();
     // let model_initialization_cost_as_balance = Self::u128_to_balance(model_initialization_cost);
 
     // ensure!(
@@ -36,7 +36,7 @@ impl<T: Config> Pallet<T> {
     // let initializer_balance = T::Currency::free_balance(&account_id);
     // ensure!(
     //   model_initialization_cost_as_balance.unwrap() >= initializer_balance,
-    //   Error::<T>::NotEnoughModelInitializationBalance
+    //   Error::<T>::NotEnoughSubnetInitializationBalance
     // );
 
     // // Lock balance
@@ -53,13 +53,13 @@ impl<T: Config> Pallet<T> {
     // // Ensure minimum peers required are already met before going forward
     // // @to-do: Get minimum model peers from network pallet
     // ensure!(
-    //   model_peers.len() as u32 >= T::ModelVote::get_min_model_peers() && 
-    //   model_peers.len() as u32 <= T::ModelVote::get_max_model_peers(),
-    //   Error::<T>::ModelPeersMin
+    //   subnet_nodes.len() as u32 >= T::SubnetVote::get_min_subnet_nodes() && 
+    //   subnet_nodes.len() as u32 <= T::SubnetVote::get_max_subnet_nodes(),
+    //   Error::<T>::SubnetNodesMin
     // );
 
     // // Ensure peers have the minimum required stake balance
-    // let min_stake: u128 = T::ModelVote::get_min_stake_balance();
+    // let min_stake: u128 = T::SubnetVote::get_min_stake_balance();
     // let min_stake_as_balance = Self::u128_to_balance(min_stake);
 
     // ensure!(
@@ -67,7 +67,7 @@ impl<T: Config> Pallet<T> {
     //   Error::<T>::CouldNotConvertToBalance
     // );
 
-    // for peer in model_peers.clone() {
+    // for peer in subnet_nodes.clone() {
     //   let peer_balance = T::Currency::free_balance(&peer.account_id);
 
     //   ensure!(

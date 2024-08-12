@@ -32,9 +32,9 @@ use core::marker::PhantomData;
 /// Weight functions needed for `pallet_network`.
 pub trait WeightInfo {
 	fn add_model() -> Weight;
-	fn add_model_peer() -> Weight;
-	fn update_model_peer() -> Weight;
-	fn remove_model_peer() -> Weight;
+	fn add_subnet_node() -> Weight;
+	fn update_subnet_node() -> Weight;
+	fn remove_subnet_node() -> Weight;
 	fn update_port() -> Weight;
 	fn add_to_stake() -> Weight;
 	fn remove_stake() -> Weight;
@@ -112,7 +112,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Network::ModelAccount` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `Network::AccountModels` (r:1 w:1)
 	/// Proof: `Network::AccountModels` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	fn add_model_peer() -> Weight {
+	fn add_subnet_node() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `537`
 		//  Estimated: `4002`
@@ -133,7 +133,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Network::RemoveModelPeerEpochPercentage` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
 	/// Storage: `Network::MinRequiredPeerConsensusSubmitEpochs` (r:1 w:0)
 	/// Proof: `Network::MinRequiredPeerConsensusSubmitEpochs` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
-	fn update_model_peer() -> Weight {
+	fn update_subnet_node() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `862`
 		//  Estimated: `4327`
@@ -160,7 +160,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Network::ModelPeerConsensusResults` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `Network::ModelPeerAccount` (r:0 w:1)
 	/// Proof: `Network::ModelPeerAccount` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	fn remove_model_peer() -> Weight {
+	fn remove_subnet_node() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `819`
 		//  Estimated: `4284`
@@ -516,7 +516,7 @@ impl WeightInfo for () {
 	/// Proof: `Network::ModelAccount` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `Network::AccountModels` (r:1 w:1)
 	/// Proof: `Network::AccountModels` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	fn add_model_peer() -> Weight {
+	fn add_subnet_node() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `537`
 		//  Estimated: `4002`
@@ -537,7 +537,7 @@ impl WeightInfo for () {
 	/// Proof: `Network::RemoveModelPeerEpochPercentage` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
 	/// Storage: `Network::MinRequiredPeerConsensusSubmitEpochs` (r:1 w:0)
 	/// Proof: `Network::MinRequiredPeerConsensusSubmitEpochs` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
-	fn update_model_peer() -> Weight {
+	fn update_subnet_node() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `862`
 		//  Estimated: `4327`
@@ -564,7 +564,7 @@ impl WeightInfo for () {
 	/// Proof: `Network::ModelPeerConsensusResults` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `Network::ModelPeerAccount` (r:0 w:1)
 	/// Proof: `Network::ModelPeerAccount` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	fn remove_model_peer() -> Weight {
+	fn remove_subnet_node() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `819`
 		//  Estimated: `4284`

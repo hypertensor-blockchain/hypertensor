@@ -25,14 +25,14 @@ use frame_support::{
 	traits::{Currency, EnsureOrigin, Get, OnInitialize, UnfilteredDispatchable},
 };
 use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
-use crate::Pallet as ModelVoting;
+use crate::Pallet as SubnetVoting;
 use crate::{
-  ModelPeer, PropsType, ModelVote, VotesBalance, ReservableCurrency, PropCount, VoteType,
+  SubnetNode, PropsType, SubnetVote, VotesBalance, ReservableCurrency, PropCount, VoteType,
   Votes, ActiveProposals, Proposals, PropsStatus, Quorum
 };
 use frame_support::dispatch::Vec;
 use scale_info::prelude::{vec, format};
-use pallet_network::{MinStakeBalance, MinModelPeers};
+use pallet_network::{MinStakeBalance, MinSubnetNodes};
 // use pallet_balances::*;
 
 const SEED: u32 = 0;
@@ -66,25 +66,25 @@ pub fn block_to_u64<T: frame_system::Config>(input: BlockNumberFor<T>) -> u64 {
 
 fn funded_account<T: Config>(name: &'static str, index: u32) -> T::AccountId {
 	let caller: T::AccountId = account(name, index, SEED);
-	let deposit_amount: u128 = T::ModelVote::get_model_initialization_cost();
+	let deposit_amount: u128 = T::SubnetVote::get_model_initialization_cost();
   T::Currency::deposit_creating(&caller, deposit_amount.try_into().ok().expect("REASON"));
 	caller
 }
 
-fn build_model_peers<T: Config>(start: u32, end: u32, deposit_amount: u128) -> Vec<ModelPeer<T::AccountId>> {
-  let mut model_peers: Vec<ModelPeer<T::AccountId>> = Vec::new();
+fn build_subnet_nodes<T: Config>(start: u32, end: u32, deposit_amount: u128) -> Vec<SubnetNode<T::AccountId>> {
+  let mut subnet_nodes: Vec<SubnetNode<T::AccountId>> = Vec::new();
   
   for n in start..end {
     let _ = T::Currency::deposit_creating(&funded_account::<T>("voter", n), deposit_amount.try_into().ok().expect("REASON"));
-    let model_peer = ModelPeer {
+    let subnet_node = SubnetNode {
       account_id: funded_account::<T>("voter", n),
       peer_id: peer(n),
       ip: default_ip(),
       port: DEFAULT_PORT,
     };
-    model_peers.push(model_peer);
+    subnet_nodes.push(subnet_node);
   }
-  model_peers
+  subnet_nodes
 }
 
 fn post_proposal_concluded<T: Config>(proposal_index: u32, proposer: T::AccountId) {
@@ -93,7 +93,7 @@ fn post_proposal_concluded<T: Config>(proposal_index: u32, proposer: T::AccountI
 
   // --- Ensure cannot call twice
   assert_err!(
-    ModelVoting::<T>::execute(
+    SubnetVoting::<T>::execute(
       RawOrigin::Signed(proposer.clone()).into(),
       proposal_index,
     ),
@@ -102,7 +102,7 @@ fn post_proposal_concluded<T: Config>(proposal_index: u32, proposer: T::AccountI
 
   // --- Ensure cannot cast vote
   assert_err!(
-    ModelVoting::<T>::cast_vote(
+    SubnetVoting::<T>::cast_vote(
       RawOrigin::Signed(proposer.clone()).into(),
       proposal_index,
       DEFAUT_VOTE_AMOUNT.try_into().ok().expect("REASON"),
@@ -113,7 +113,7 @@ fn post_proposal_concluded<T: Config>(proposal_index: u32, proposer: T::AccountI
 
   // --- Ensure cannot cancel proposal
   assert_err!(
-    ModelVoting::<T>::cancel_proposal(
+    SubnetVoting::<T>::cancel_proposal(
       RawOrigin::Signed(proposer.clone()).into(),
       proposal_index,
     ),
@@ -126,10 +126,10 @@ fn post_success_proposal_activate_ensures<T: Config>(path: Vec<u8>, proposal_ind
   assert_eq!(proposal.path, path);
   assert_eq!(proposal.proposal_status, PropsStatus::Active);
   assert_eq!(proposal.proposal_type, PropsType::Activate);
-  // assert_eq!(proposal.model_peers, path);
+  // assert_eq!(proposal.subnet_nodes, path);
   assert_eq!(proposal.max_block, proposal_start_block + block_to_u64::<T>(T::VotingPeriod::get()));
 
-  let model_initialization_cost = T::ModelVote::get_model_initialization_cost();
+  let model_initialization_cost = T::SubnetVote::get_model_initialization_cost();
   // assert_eq!(VotesBalance::<T>::get(proposal_index, proposer), model_initialization_cost.clone());
 
   // let reserved_balance = <pallet_balances::Pallet<T> as ReservableCurrency<T>>::reserved_balance(&proposer);
@@ -141,7 +141,7 @@ fn post_success_proposal_activate_ensures<T: Config>(path: Vec<u8>, proposal_ind
 }
 
 fn post_activate_cancel_ensures<T: Config>(proposal_index: u32, proposer: T::AccountId, path: Vec<u8>) {
-  let is_active = T::ModelVote::get_model_path_exist(path);
+  let is_active = T::SubnetVote::get_model_path_exist(path);
   // assert_eq!(is_active, None);
 
   let proposal = Proposals::<T>::get(proposal_index);
@@ -152,7 +152,7 @@ fn post_activate_cancel_ensures<T: Config>(proposal_index: u32, proposer: T::Acc
 
 fn post_cast_vote_ensures<T: Config>(proposal_index: u32, voter: u32) {
   assert_err!(
-    ModelVoting::<T>::unreserve(
+    SubnetVoting::<T>::unreserve(
       RawOrigin::Signed(funded_account::<T>("voter", voter)).into(),
       proposal_index, 
     ),
@@ -161,14 +161,14 @@ fn post_cast_vote_ensures<T: Config>(proposal_index: u32, voter: u32) {
 }
 
 fn build_propose_activate<T: Config>(path: Vec<u8>, start: u32, end: u32, deposit_amount: u128) -> u32 {
-  let model_peers = build_model_peers::<T>(start, end, deposit_amount);
+  let subnet_nodes = build_subnet_nodes::<T>(start, end, deposit_amount);
   let proposer = funded_account::<T>("account", 0);
 
   assert_ok!(
-    ModelVoting::<T>::propose(
+    SubnetVoting::<T>::propose(
       RawOrigin::Signed(proposer.clone()).into(),
       default_model_path(), 
-      model_peers,
+      subnet_nodes,
       PropsType::Activate,
     )
   );
@@ -180,7 +180,7 @@ fn build_cast_vote<T: Config>(proposal_index: u32, start: u32, end: u32, vote: V
     let voter = funded_account::<T>("voter", n);
     let _ = T::Currency::deposit_creating(&funded_account::<T>("voter", n), DEFAUT_VOTE_AMOUNT.try_into().ok().expect("REASON"),);
     assert_ok!(
-      ModelVoting::<T>::cast_vote(
+      SubnetVoting::<T>::cast_vote(
         RawOrigin::Signed(voter).into(),
         proposal_index,
         DEFAUT_VOTE_AMOUNT.try_into().ok().expect("REASON"),
@@ -193,11 +193,11 @@ fn build_cast_vote<T: Config>(proposal_index: u32, start: u32, end: u32, vote: V
 benchmarks! {
   propose {
     let prop_count = PropCount::<T>::get();
-    let min_stake = T::ModelVote::get_min_stake_balance();
-    let min_model_peers: u32 = T::ModelVote::get_min_model_peers();
+    let min_stake = T::SubnetVote::get_min_stake_balance();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
 		let proposer = funded_account::<T>("account", 0);
-    let model_peers = build_model_peers::<T>(0, min_model_peers, min_stake);
-	}: propose(RawOrigin::Signed(proposer.clone()), default_model_path(), model_peers, PropsType::Activate)
+    let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
+	}: propose(RawOrigin::Signed(proposer.clone()), default_model_path(), subnet_nodes, PropsType::Activate)
 	verify {
     assert_eq!(1, 1);
 		post_success_proposal_activate_ensures::<T>(
@@ -210,11 +210,11 @@ benchmarks! {
 
   cast_vote {
     let prop_count = PropCount::<T>::get();
-    let min_stake = T::ModelVote::get_min_stake_balance();
-    let min_model_peers: u32 = T::ModelVote::get_min_model_peers();
+    let min_stake = T::SubnetVote::get_min_stake_balance();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
 		let voter = funded_account::<T>("voter", 0);
-    let model_peers = build_model_peers::<T>(0, min_model_peers, min_stake);
-    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_model_peers, DEFAULT_DEPOSIT_AMOUNT);
+    let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
+    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 	}: cast_vote(RawOrigin::Signed(voter.clone()), proposal_index, DEFAUT_VOTE_AMOUNT.try_into().ok().expect("REASON"), VoteType::Yay)
 	verify {
     assert_eq!(1, 1);
@@ -223,12 +223,12 @@ benchmarks! {
 
   execute {
     let prop_count = PropCount::<T>::get();
-    let min_stake = T::ModelVote::get_min_stake_balance();
-    let min_model_peers: u32 = T::ModelVote::get_min_model_peers();
+    let min_stake = T::SubnetVote::get_min_stake_balance();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
 		let voter = funded_account::<T>("voter", 0);
-    let model_peers = build_model_peers::<T>(0, min_model_peers, min_stake);
-    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_model_peers, DEFAULT_DEPOSIT_AMOUNT);
-    build_cast_vote::<T>(proposal_index, 0, min_model_peers, VoteType::Yay);
+    let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
+    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
+    build_cast_vote::<T>(proposal_index, 0, min_subnet_nodes, VoteType::Yay);
 	}: execute(RawOrigin::Signed(voter.clone()), proposal_index)
 	verify {
     assert_eq!(1, 1);
@@ -236,11 +236,11 @@ benchmarks! {
 
   cancel_proposal {
     let prop_count = PropCount::<T>::get();
-    let min_stake = T::ModelVote::get_min_stake_balance();
-    let min_model_peers: u32 = T::ModelVote::get_min_model_peers();
+    let min_stake = T::SubnetVote::get_min_stake_balance();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
 		let voter = funded_account::<T>("voter", 0);
-    let model_peers = build_model_peers::<T>(0, min_model_peers, min_stake);
-    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_model_peers, DEFAULT_DEPOSIT_AMOUNT);
+    let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
+    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 	}: cancel_proposal(RawOrigin::Signed(voter.clone()), proposal_index)
 	verify {
     assert_eq!(1, 1);
@@ -248,18 +248,18 @@ benchmarks! {
 
   unreserve {
     let prop_count = PropCount::<T>::get();
-    let min_stake = T::ModelVote::get_min_stake_balance();
-    let min_model_peers: u32 = T::ModelVote::get_min_model_peers();
+    let min_stake = T::SubnetVote::get_min_stake_balance();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
 		let voter = funded_account::<T>("voter", 0);
-    let model_peers = build_model_peers::<T>(0, min_model_peers, min_stake);
-    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_model_peers, DEFAULT_DEPOSIT_AMOUNT);
+    let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
+    let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 	}: unreserve(RawOrigin::Signed(voter.clone()), proposal_index)
 	verify {
     assert_eq!(1, 1);
   }
 
   impl_benchmark_test_suite!(
-		ModelVoting,
+		SubnetVoting,
 		crate::mock::new_test_ext(),
 		crate::mock::Test
 	);

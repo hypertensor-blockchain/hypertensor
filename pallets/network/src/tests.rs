@@ -16,7 +16,7 @@
 #![cfg(test)]
 use crate::mock::*;
 use crate::Error;
-use crate::ModelPeerData;
+use crate::SubnetNodeData;
 // use frame_support::traits::OriginTrait;
 use sp_core::OpaquePeerId as PeerId;
 use frame_support::{
@@ -27,20 +27,20 @@ use sp_core::{H256, U256};
 // use parity_scale_codec::Decode;
 use frame_support::traits::Currency;
 use crate::{
-  ModelPeerConsensusResults, AccountPenaltyCount, TotalStake, 
-  StakeVaultBalance, ModelPaths, EpochLength, PeerRemovalThreshold,
-  MinRequiredUnstakeEpochs, MaxAccountPenaltyCount, MinModelPeers,
-  ModelConsensusUnconfirmedThreshold, ModelPeersData, ModelPeerAccount,
-  ModelAccount, ModelConsensusEpochsErrors, RemoveModelPeerEpochPercentage,
-  PeerConsensusEpochSubmitted, MinRequiredPeerConsensusInclusionEpochs,
-  PeerConsensusEpochUnconfirmed, AccountModelStake, MinStakeBalance,
-  ModelTotalConsensusSubmits, PeerAgainstConsensusRemovalThreshold,
-  ModelConsensusEpochUnconfirmedCount, ModelsInConsensus,
-  MaxModelConsensusUnconfirmedConsecutiveEpochs, ModelConsensusUnconfirmedConsecutiveEpochsCount,
-  VotingPeriod, ModelPeerDishonestyVote, MinRequiredPeerAccountantEpochs,
-  AccountModelDelegateStakeShares,TotalModelDelegateStakeShares, TotalModelDelegateStakeBalance,
-  MinRequiredDelegateUnstakeEpochs, TotalModels, CurrentAccountant2, AccountantDataCount, PropsType,
-  AccountantDataPeerParams
+  SubnetNodeConsensusResults, AccountPenaltyCount, TotalStake, 
+  StakeVaultBalance, SubnetPaths, EpochLength, NodeRemovalThreshold,
+  MinRequiredUnstakeEpochs, MaxAccountPenaltyCount, MinSubnetNodes,
+  SubnetConsensusUnconfirmedThreshold, SubnetNodesData, SubnetNodeAccount,
+  SubnetAccount, SubnetConsensusEpochsErrors, RemoveSubnetNodeEpochPercentage,
+  NodeConsensusEpochSubmitted, MinRequiredNodeConsensusInclusionEpochs,
+  NodeConsensusEpochUnconfirmed, AccountSubnetStake, MinStakeBalance,
+  SubnetTotalConsensusSubmits, NodeAgainstConsensusRemovalThreshold,
+  SubnetConsensusEpochUnconfirmedCount, SubnetsInConsensus,
+  MaxSubnetConsensusUnconfirmedConsecutiveEpochs, SubnetConsensusUnconfirmedConsecutiveEpochsCount,
+  VotingPeriod, SubnetNodeDishonestyVote, MinRequiredNodeAccountantEpochs,
+  AccountSubnetDelegateStakeShares,TotalSubnetDelegateStakeShares, TotalSubnetDelegateStakeBalance,
+  MinRequiredDelegateUnstakeEpochs, TotalSubnets, CurrentAccountant2, AccountantDataCount, PropsType,
+  AccountantDataNodeParams, SubnetRewardsValidator, SubnetRewardsSubmission
 };
 use frame_support::weights::Pays;
 use frame_support::BoundedVec;
@@ -76,52 +76,52 @@ const PERCENTAGE_FACTOR: u128 = 10000;
 const DEFAULT_SCORE: u128 = 5000;
 const CONSENSUS_STEPS: u64 = 2;
 
-fn build_model(model_path: Vec<u8>) {
+fn build_subnet(subnet_path: Vec<u8>) {
   assert_ok!(
     Network::vote_model(
       RuntimeOrigin::signed(account(0)), 
-      model_path.clone(),
+      subnet_path.clone(),
     )
   );
 
   assert_ok!(
     Network::add_model(
       RuntimeOrigin::signed(account(0)),
-      model_path.clone(),
+      subnet_path.clone(),
     ) 
   );
 }
 
-// Returns total staked on model
-fn build_model_peers(model_id: u32, start: u32, end: u32, deposit_amount: u128, amount: u128) -> u128 {
+// Returns total staked on subnet
+fn build_subnet_nodes(subnet_id: u32, start: u32, end: u32, deposit_amount: u128, amount: u128) -> u128 {
   let mut amount_staked = 0;
   for n in start..end {
     let _ = Balances::deposit_creating(&account(n), deposit_amount);
     amount_staked += amount;
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(n)),
-        model_id,
+        subnet_id,
         peer(n),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(n, model_id, amount);
+    post_successful_add_subnet_node_asserts(n, subnet_id, amount);
   }
   amount_staked
 }
 
-fn build_for_submit_consensus_data(model_id: u32, start: u32, end: u32, start_data: u32, end_data: u32) {
-  let model_peer_data_vec = model_peer_data(start_data, end_data);
+fn build_for_submit_consensus_data(subnet_id: u32, start: u32, end: u32, start_data: u32, end_data: u32) {
+  let subnet_node_data_vec = subnet_node_data(start_data, end_data);
 
   for n in start..end {
     assert_ok!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(n)),
-        model_id,
-        model_peer_data_vec.clone(),
+        subnet_id,
+        subnet_node_data_vec.clone(),
       ) 
     );
   }
@@ -134,29 +134,29 @@ fn make_model_submittable() {
   System::set_block_number(System::block_number() + epoch_length * min_required_model_consensus_submit_epochs);
 }
 
-// increase the blocks past the consensus steps and remove model peer blocks span
+// increase the blocks past the consensus steps and remove subnet peer blocks span
 fn make_consensus_data_submittable() {
   // increase blocks
   let current_block_number = System::block_number();
-  let model_peer_removal_percentage = RemoveModelPeerEpochPercentage::<Test>::get();
+  let subnet_node_removal_percentage = RemoveSubnetNodeEpochPercentage::<Test>::get();
   let epoch_length = EpochLength::<Test>::get();
 
-  let start_block_can_remove_peer = epoch_length as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR;
+  let start_block_can_remove_peer = epoch_length as u128 * subnet_node_removal_percentage / PERCENTAGE_FACTOR;
 
-  let max_remove_model_peer_block = start_block_can_remove_peer as u64 + (current_block_number - (current_block_number % epoch_length));
+  let max_remove_subnet_node_block = start_block_can_remove_peer as u64 + (current_block_number - (current_block_number % epoch_length));
 
-  if current_block_number < max_remove_model_peer_block {
-    System::set_block_number(max_remove_model_peer_block + 1);
+  if current_block_number < max_remove_subnet_node_block {
+    System::set_block_number(max_remove_subnet_node_block + 1);
   }
 }
 
-fn make_model_peer_included() {
+fn make_subnet_node_included() {
   let epoch_length = EpochLength::<Test>::get();
-  let min_required_consensus_inclusion_epochs = MinRequiredPeerConsensusInclusionEpochs::<Test>::get();
+  let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<Test>::get();
   System::set_block_number(System::block_number() + epoch_length * min_required_consensus_inclusion_epochs);
 }
 
-fn make_model_peer_consensus_data_submittable() {
+fn make_subnet_node_consensus_data_submittable() {
   // increase blocks
   let epoch_length = EpochLength::<Test>::get();
   let min_required_peer_consensus_submit_epochs: u64 = Network::min_required_peer_consensus_submit_epochs();
@@ -164,20 +164,20 @@ fn make_model_peer_consensus_data_submittable() {
   make_consensus_data_submittable();
 }
 
-fn make_model_peer_dishonesty_consensus_proposable() {
+fn make_subnet_node_dishonesty_consensus_proposable() {
   // increase blocks
   let epoch_length = EpochLength::<Test>::get();
-  let min_required_peer_consensus_submit_epochs: u64 = MinRequiredPeerAccountantEpochs::<Test>::get();
+  let min_required_peer_consensus_submit_epochs: u64 = MinRequiredNodeAccountantEpochs::<Test>::get();
   System::set_block_number(System::block_number() + epoch_length * min_required_peer_consensus_submit_epochs);
 }
 
-fn make_model_peer_removable() {
+fn make_subnet_node_removable() {
   // increase blocks
   let current_block_number = System::block_number();
-  let model_peer_removal_percentage = RemoveModelPeerEpochPercentage::<Test>::get();
+  let subnet_node_removal_percentage = RemoveSubnetNodeEpochPercentage::<Test>::get();
   let epoch_length = EpochLength::<Test>::get();
 
-  let block_span_can_remove_peer = (epoch_length as u128 * model_peer_removal_percentage / PERCENTAGE_FACTOR) as u64;
+  let block_span_can_remove_peer = (epoch_length as u128 * subnet_node_removal_percentage / PERCENTAGE_FACTOR) as u64;
 
   let start_removal_block = (CONSENSUS_STEPS + (current_block_number - (current_block_number % epoch_length))) as u64;
 
@@ -190,138 +190,138 @@ fn make_model_peer_removable() {
   }
 }
 
-// fn model_peer_data(start: u8, end: u8) -> Vec<ModelPeerData<<Test as frame_system::Config>::AccountId>> {
-fn model_peer_data(start: u32, end: u32) -> Vec<ModelPeerData> {
+// fn subnet_node_data(start: u8, end: u8) -> Vec<SubnetNodeData<<Test as frame_system::Config>::AccountId>> {
+fn subnet_node_data(start: u32, end: u32) -> Vec<SubnetNodeData> {
   // initialize peer consensus data array
-  let mut model_peer_data: Vec<ModelPeerData> = Vec::new();
+  let mut subnet_node_data: Vec<SubnetNodeData> = Vec::new();
   for n in start..end {
-    // let peer_model_peer_data: ModelPeerData<<Test as frame_system::Config>::AccountId> = ModelPeerData {
+    // let peer_subnet_node_data: SubnetNodeData<<Test as frame_system::Config>::AccountId> = SubnetNodeData {
     //   // account_id: account(n),
     //   peer_id: peer(n),
     //   score: DEFAULT_SCORE,
     // };
-    let peer_model_peer_data: ModelPeerData = ModelPeerData {
+    let peer_subnet_node_data: SubnetNodeData = SubnetNodeData {
       peer_id: peer(n),
       score: DEFAULT_SCORE,
     };
-    model_peer_data.push(peer_model_peer_data);
+    subnet_node_data.push(peer_subnet_node_data);
   }
-  model_peer_data
+  subnet_node_data
 }
 
-// fn model_peer_data_invalid_scores(start: u8, end: u8) -> Vec<ModelPeerData<<Test as frame_system::Config>::AccountId>> {
-fn model_peer_data_invalid_scores(start: u32, end: u32) -> Vec<ModelPeerData> {
+// fn subnet_node_data_invalid_scores(start: u8, end: u8) -> Vec<SubnetNodeData<<Test as frame_system::Config>::AccountId>> {
+fn subnet_node_data_invalid_scores(start: u32, end: u32) -> Vec<SubnetNodeData> {
   // initialize peer consensus data array
-  // let mut model_peer_data: Vec<ModelPeerData<<Test as frame_system::Config>::AccountId>> = Vec::new();
-  let mut model_peer_data: Vec<ModelPeerData> = Vec::new();
+  // let mut subnet_node_data: Vec<SubnetNodeData<<Test as frame_system::Config>::AccountId>> = Vec::new();
+  let mut subnet_node_data: Vec<SubnetNodeData> = Vec::new();
   for n in start..end {
-    // let peer_model_peer_data: ModelPeerData<<Test as frame_system::Config>::AccountId> = ModelPeerData {
+    // let peer_subnet_node_data: SubnetNodeData<<Test as frame_system::Config>::AccountId> = SubnetNodeData {
     //   // account_id: account(n),
     //   peer_id: peer(n),
     //   score: 10000000000,
     // };
-    let peer_model_peer_data: ModelPeerData = ModelPeerData {
+    let peer_subnet_node_data: SubnetNodeData = SubnetNodeData {
       peer_id: peer(n),
       score: 10000000000,
     };
-    model_peer_data.push(peer_model_peer_data);
+    subnet_node_data.push(peer_subnet_node_data);
   }
-  model_peer_data
+  subnet_node_data
 }
 
-fn post_successful_add_model_peer_asserts(
+fn post_successful_add_subnet_node_asserts(
   n: u32, 
-  model_id: u32, 
+  subnet_id: u32, 
   amount: u128
 ) {
-  assert_eq!(Network::account_model_stake(account(n), model_id), amount);
+  assert_eq!(Network::account_model_stake(account(n), subnet_id), amount);
   assert_eq!(Network::total_account_stake(account(n)), amount);    
-  assert_eq!(Network::total_model_peers(model_id), (n + 1) as u32);
+  assert_eq!(Network::total_subnet_nodes(subnet_id), (n + 1) as u32);
 }
 
 // check data after adding multiple peers
-// each peer must have equal staking amount per model
-fn post_successful_add_model_peers_asserts(
+// each peer must have equal staking amount per subnet
+fn post_successful_add_subnet_nodes_asserts(
   total_peers: u32,
   stake_per_peer: u128,  
-  model_id: u32, 
+  subnet_id: u32, 
 ) {
   let amount_staked = total_peers as u128 * stake_per_peer;
-  assert_eq!(Network::total_model_stake(model_id), amount_staked);
+  assert_eq!(Network::total_model_stake(subnet_id), amount_staked);
 }
 
-fn post_remove_model_peer_ensures(n: u32, model_id: u32) {
-  // ensure ModelPeersData removed
-  let model_peer_data = ModelPeersData::<Test>::try_get(model_id, account(n));
-  assert_eq!(model_peer_data, Err(()));
+fn post_remove_subnet_node_ensures(n: u32, subnet_id: u32) {
+  // ensure SubnetNodesData removed
+  let subnet_node_data = SubnetNodesData::<Test>::try_get(subnet_id, account(n));
+  assert_eq!(subnet_node_data, Err(()));
 
-  // ensure ModelPeerAccount removed
-  let model_peer_account = ModelPeerAccount::<Test>::try_get(model_id, peer(n));
-  assert_eq!(model_peer_account, Err(()));
+  // ensure SubnetNodeAccount removed
+  let subnet_node_account = SubnetNodeAccount::<Test>::try_get(subnet_id, peer(n));
+  assert_eq!(subnet_node_account, Err(()));
 
-  // ensure ModelPeerConsensusResults removed
-  let model_peer_consensus_results = ModelPeerConsensusResults::<Test>::try_get(model_id, account(n));
-  assert_eq!(model_peer_consensus_results, Err(()));
+  // ensure SubnetNodeConsensusResults removed
+  let subnet_node_consensus_results = SubnetNodeConsensusResults::<Test>::try_get(subnet_id, account(n));
+  assert_eq!(subnet_node_consensus_results, Err(()));
 
-  // ensure ModelAccount u64 updated to current block
-  let model_accounts = ModelAccount::<Test>::get(model_id.clone());
+  // ensure SubnetAccount u64 updated to current block
+  let model_accounts = SubnetAccount::<Test>::get(subnet_id.clone());
   let model_account = model_accounts.get(&account(n));
   assert_eq!(model_accounts.get(&account(n)), Some(&System::block_number()));
 }
 
-fn post_remove_unstake_ensures(n: u32, model_id: u32) {
-  // ensure ModelAccount is removed after unstaking to 0
-  let model_accounts = ModelAccount::<Test>::get(model_id.clone());
+fn post_remove_unstake_ensures(n: u32, subnet_id: u32) {
+  // ensure SubnetAccount is removed after unstaking to 0
+  let model_accounts = SubnetAccount::<Test>::get(subnet_id.clone());
   let model_account = model_accounts.get(&account(n));
   assert_eq!(model_accounts.get(&account(n)), None);
 }
 
 // The following should be ensured after form_consensus is rate
 // This should work regardless if there are consensus issues or not
-fn post_successful_form_consensus_ensures(model_id: u32) {
-  let peer_consensus_epoch_submitted = PeerConsensusEpochSubmitted::<Test>::iter().count();
+fn post_successful_form_consensus_ensures(subnet_id: u32) {
+  let peer_consensus_epoch_submitted = NodeConsensusEpochSubmitted::<Test>::iter().count();
   assert_eq!(peer_consensus_epoch_submitted, 0);
-  let peer_consensus_epoch_confirmed = PeerConsensusEpochUnconfirmed::<Test>::iter().count();
+  let peer_consensus_epoch_confirmed = NodeConsensusEpochUnconfirmed::<Test>::iter().count();
   assert_eq!(peer_consensus_epoch_confirmed, 0);
-  let model_total_consensus_submits = ModelTotalConsensusSubmits::<Test>::iter().count();
+  let model_total_consensus_submits = SubnetTotalConsensusSubmits::<Test>::iter().count();
   assert_eq!(model_total_consensus_submits, 0);
-  let model_consensus_epoch_unconfirmed_count = ModelConsensusEpochUnconfirmedCount::<Test>::try_get(model_id.clone());
+  let model_consensus_epoch_unconfirmed_count = SubnetConsensusEpochUnconfirmedCount::<Test>::try_get(subnet_id.clone());
   assert_eq!(model_consensus_epoch_unconfirmed_count, Err(()));
 }
 
 fn post_successful_generate_emissions_ensures() {
-  let models_in_consensus = ModelsInConsensus::<Test>::try_get();
+  let models_in_consensus = SubnetsInConsensus::<Test>::try_get();
   assert_eq!(models_in_consensus, Err(()));
 
-  let models_in_consensus = ModelsInConsensus::<Test>::get();
+  let models_in_consensus = SubnetsInConsensus::<Test>::get();
   assert_eq!(models_in_consensus.len(), 0);
 
 
-  let model_peer_consensus_results = ModelPeerConsensusResults::<Test>::iter().count();
-  assert_eq!(model_peer_consensus_results, 0);
+  let subnet_node_consensus_results = SubnetNodeConsensusResults::<Test>::iter().count();
+  assert_eq!(subnet_node_consensus_results, 0);
 }
 
-fn post_successful_dishonesty_proposal_ensures(proposer: u32, votee: u32, model_id: u32) {
-  let model_peer_dishonesty_vote = ModelPeerDishonestyVote::<Test>::get(model_id.clone(), account(votee));
+fn post_successful_dishonesty_proposal_ensures(proposer: u32, votee: u32, subnet_id: u32) {
+  let subnet_node_dishonesty_vote = SubnetNodeDishonestyVote::<Test>::get(subnet_id.clone(), account(votee));
 
-  assert_eq!(model_peer_dishonesty_vote.model_id, model_id.clone());
-  assert_eq!(model_peer_dishonesty_vote.peer_id, peer(votee).into());
-  assert_eq!(model_peer_dishonesty_vote.total_votes, 1);
-  assert_eq!(model_peer_dishonesty_vote.votes[0], account(proposer));
-  assert_ne!(model_peer_dishonesty_vote.start_block, 0);
+  assert_eq!(subnet_node_dishonesty_vote.subnet_id, subnet_id.clone());
+  assert_eq!(subnet_node_dishonesty_vote.peer_id, peer(votee).into());
+  assert_eq!(subnet_node_dishonesty_vote.total_votes, 1);
+  assert_eq!(subnet_node_dishonesty_vote.votes[0], account(proposer));
+  assert_ne!(subnet_node_dishonesty_vote.start_block, 0);
 }
 
-fn add_model_peer(
+fn add_subnet_node(
   account_id: u32, 
-  model_id: u32,
+  subnet_id: u32,
   peer_id: u32,
   ip: String,
   port: u16,
   amount: u128
 ) -> Result<(), sp_runtime::DispatchError> {
-  Network::add_model_peer(
+  Network::add_subnet_node(
     RuntimeOrigin::signed(account(account_id)),
-    model_id,
+    subnet_id,
     peer(peer_id),
     ip.into(),
     port,
@@ -333,15 +333,15 @@ fn add_model_peer(
 fn test_add_model() {
   new_test_ext().execute_with(|| {
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     assert_eq!(Network::total_models(), 1);
 
     let model_path_2: Vec<u8> = "petals-team-2/StableBeluga2".into();
 
-    build_model(model_path_2.clone());
+    build_subnet(model_path_2.clone());
 
     assert_eq!(Network::total_models(), 2);
 
@@ -352,26 +352,26 @@ fn test_add_model() {
 fn test_add_model_err() {
   new_test_ext().execute_with(|| {
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
     assert_err!(
       Network::add_model(
         RuntimeOrigin::signed(account(0)),
-        model_path.clone(),
+        subnet_path.clone(),
       ),
-      Error::<Test>::ModelNotVotedIn
+      Error::<Test>::SubnetNotVotedIn
     );
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     assert_eq!(Network::total_models(), 1);
 
     assert_err!(
       Network::add_model(
         RuntimeOrigin::signed(account(0)),
-        model_path.clone(),
+        subnet_path.clone(),
       ),
-      Error::<Test>::ModelExist
+      Error::<Test>::SubnetExist
     );
   })
 }
@@ -380,25 +380,25 @@ fn test_add_model_err() {
 fn test_remove_model() {
   new_test_ext().execute_with(|| {
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     assert_eq!(Network::total_models(), 1);
 
     assert_ok!(
       Network::vote_model_out(
         RuntimeOrigin::signed(account(0)), 
-        model_path.clone()
+        subnet_path.clone()
       )
     );
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     assert_ok!(
       Network::remove_model(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
       ) 
     );
 
@@ -409,9 +409,9 @@ fn test_remove_model() {
 #[test]
 fn test_remove_model_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     assert_eq!(Network::total_models(), 1);
 
@@ -420,7 +420,7 @@ fn test_remove_model_err() {
         RuntimeOrigin::signed(account(0)),
         255,
       ),
-      Error::<Test>::ModelNotExist
+      Error::<Test>::SubnetNotExist
     );
   })
 }
@@ -431,11 +431,11 @@ fn test_add_model_max_models_err() {
     let n_models: u32 = Network::max_models() + 1;
 
     for m in 0..n_models {
-      let model_path = format!("petals-team-{m}/StableBeluga");  
+      let subnet_path = format!("petals-team-{m}/StableBeluga");  
       assert_ok!(
         Network::vote_model(
           RuntimeOrigin::signed(account(0)), 
-          model_path.clone().into()
+          subnet_path.clone().into()
         )
       );
   
@@ -443,16 +443,16 @@ fn test_add_model_max_models_err() {
         assert_ok!(
           Network::add_model(
             RuntimeOrigin::signed(account(0)),
-            model_path.clone().into(),
+            subnet_path.clone().into(),
           ) 
         );
       } else {
         assert_err!(
           Network::add_model(
             RuntimeOrigin::signed(account(0)),
-            model_path.clone().into(),
+            subnet_path.clone().into(),
           ),
-          Error::<Test>::MaxModels
+          Error::<Test>::MaxSubnets
         );
       }
     }
@@ -460,19 +460,19 @@ fn test_add_model_max_models_err() {
 }
 
 #[test]
-fn test_add_model_peer_max_peers_err() {
+fn test_add_subnet_node_max_peers_err() {
   new_test_ext().execute_with(|| {
-    let n_peers: u32 = Network::max_model_peers() + 1;
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let n_peers: u32 = Network::max_subnet_nodes() + 1;
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
     let mut total_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
     for n in 0..n_peers {
@@ -481,9 +481,9 @@ fn test_add_model_peer_max_peers_err() {
       if n+1 < n_peers {
         total_staked += amount;
         assert_ok!(
-          add_model_peer(
+          add_subnet_node(
             n, 
-            model_id.clone(),
+            subnet_id.clone(),
             n,
             "172.20.54.234".into(),
             8888,
@@ -492,29 +492,29 @@ fn test_add_model_peer_max_peers_err() {
         );
 
         // assert_ok!(
-        //   Network::add_model_peer(
+        //   Network::add_subnet_node(
         //     RuntimeOrigin::signed(account(n)),
-        //     model_id.clone(),
+        //     subnet_id.clone(),
         //     peer(n),
         //     "172.20.54.234".into(),
         //     8888,
         //     amount,
         //   ) 
         // );
-        assert_eq!(Network::total_model_peers(1), (n + 1) as u32);
+        assert_eq!(Network::total_subnet_nodes(1), (n + 1) as u32);
         assert_eq!(Network::account_model_stake(account(n), 1), amount);
         assert_eq!(Network::total_account_stake(account(n)), amount);
       } else {
         assert_err!(
-          Network::add_model_peer(
+          Network::add_subnet_node(
             RuntimeOrigin::signed(account(n)),
-            model_id.clone(),
+            subnet_id.clone(),
             peer(n),
             "172.20.54.234".into(),
             8888,
             amount,
           ),
-          Error::<Test>::ModelPeersMax
+          Error::<Test>::SubnetNodesMax
         );
       }
     }
@@ -525,20 +525,20 @@ fn test_add_model_peer_max_peers_err() {
 }
 
 #[test]
-fn test_add_model_peer_model_err() {
+fn test_add_subnet_node_model_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let amount: u128 = 1000;
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
         0,
         peer(0),
@@ -546,24 +546,24 @@ fn test_add_model_peer_model_err() {
         8888,
         amount,
       ),
-      Error::<Test>::ModelNotExist
+      Error::<Test>::SubnetNotExist
     );
 
-    assert_eq!(Network::total_model_peers(1), 0);
+    assert_eq!(Network::total_subnet_nodes(1), 0);
 
   })
 }
 
 #[test]
-fn test_add_model_peer_model_account_ineligible_err() {
+fn test_add_subnet_node_model_account_ineligible_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
     let max_account_penalty_count = MaxAccountPenaltyCount::<Test>::get();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -572,9 +572,9 @@ fn test_add_model_peer_model_account_ineligible_err() {
     AccountPenaltyCount::<Test>::insert(account(0), max_account_penalty_count + 1);
 
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -583,58 +583,58 @@ fn test_add_model_peer_model_account_ineligible_err() {
       Error::<Test>::AccountIneligible
     );
 
-    assert_eq!(Network::total_model_peers(1), 0);
+    assert_eq!(Network::total_subnet_nodes(1), 0);
   })
 }
 
 #[test]
-fn test_add_model_peer_not_exists_err() {
+fn test_add_subnet_node_not_exists_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     // add new peer_id under same account error
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(1),
         "172.20.54.234".into(),
         8888,
         amount,
       ),
-      Error::<Test>::ModelPeerExist
+      Error::<Test>::SubnetNodeExist
     );
 
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     // add same peer_id under new account error
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(1)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -643,43 +643,43 @@ fn test_add_model_peer_not_exists_err() {
       Error::<Test>::PeerIdExist
     );
 
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     // add new peer_id under same account error
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(1),
         "172.20.54.234".into(),
         8888,
         amount,
       ),
-      Error::<Test>::ModelPeerExist
+      Error::<Test>::SubnetNodeExist
     );
   })
 }
 
 #[test]
-fn test_add_model_peer_stake_err() {
+fn test_add_subnet_node_stake_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 100000;
     let amount: u128 = 1;
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -692,11 +692,11 @@ fn test_add_model_peer_stake_err() {
 }
 
 #[test]
-fn test_add_model_peer_stake_not_enough_balance_err() {
+fn test_add_subnet_node_stake_not_enough_balance_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 999999999999999999999;
@@ -706,14 +706,14 @@ fn test_add_model_peer_stake_not_enough_balance_err() {
     // let amount: u128 = 1000;
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -726,20 +726,20 @@ fn test_add_model_peer_stake_not_enough_balance_err() {
 }
 
 #[test]
-fn test_add_model_peer_invalid_peer_id_err() {
+fn test_add_subnet_node_invalid_peer_id_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
     amount_staked += amount;
@@ -749,9 +749,9 @@ fn test_add_model_peer_invalid_peer_id_err() {
     let peer_id = format!("2");
     let peer: PeerId = PeerId(peer_id.into());
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer,
         "172.20.54.234".into(),
         8888,
@@ -763,20 +763,20 @@ fn test_add_model_peer_invalid_peer_id_err() {
 }
 
 #[test]
-fn test_add_model_peer_invalid_ip_address_err() {
+fn test_add_subnet_node_invalid_ip_address_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
     amount_staked += amount;
@@ -784,9 +784,9 @@ fn test_add_model_peer_invalid_ip_address_err() {
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "0.0.0".into(),
         8888,
@@ -796,9 +796,9 @@ fn test_add_model_peer_invalid_ip_address_err() {
     );
 
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "127.0.0.1".into(),
         8888,
@@ -811,27 +811,27 @@ fn test_add_model_peer_invalid_ip_address_err() {
 }
 
 #[test]
-fn test_add_model_peer_remove_readd_err() {
+fn test_add_subnet_node_remove_readd_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -840,16 +840,16 @@ fn test_add_model_peer_remove_readd_err() {
     );
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       )
     );
 
     assert_err!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -861,27 +861,27 @@ fn test_add_model_peer_remove_readd_err() {
 }
 
 #[test]
-fn test_add_model_peer_remove_readd() {
+fn test_add_subnet_node_remove_readd() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -890,9 +890,9 @@ fn test_add_model_peer_remove_readd() {
     );
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       )
     );
 
@@ -902,9 +902,9 @@ fn test_add_model_peer_remove_readd() {
     System::set_block_number(System::block_number() + epoch_length * min_required_unstake_epochs);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -915,27 +915,27 @@ fn test_add_model_peer_remove_readd() {
 }
 
 #[test]
-fn test_add_model_peer_remove_stake_partial_readd() {
+fn test_add_subnet_node_remove_stake_partial_readd() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -943,17 +943,17 @@ fn test_add_model_peer_remove_stake_partial_readd() {
       )
     );
 
-    // increase account model stake to simulate rewards
-    AccountModelStake::<Test>::insert(&account(0), model_id.clone(), amount + 100);
+    // increase account subnet stake to simulate rewards
+    AccountSubnetStake::<Test>::insert(&account(0), subnet_id.clone(), amount + 100);
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       )
     );
 
-    // once blocks have been increased, account can either remove stake in part or in full or readd model peer
+    // once blocks have been increased, account can either remove stake in part or in full or readd subnet peer
     let epoch_length = EpochLength::<Test>::get();
     let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<Test>::get();
 
@@ -962,16 +962,16 @@ fn test_add_model_peer_remove_stake_partial_readd() {
     assert_ok!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       )
     );
 
     // should be able to readd after unstaking
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -982,27 +982,27 @@ fn test_add_model_peer_remove_stake_partial_readd() {
 }
 
 #[test]
-fn test_add_model_peer_remove_stake_readd() {
+fn test_add_subnet_node_remove_stake_readd() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1011,32 +1011,32 @@ fn test_add_model_peer_remove_stake_readd() {
     );
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       )
     );
 
-    // once blocks have been increased, account can either remove stake in part or in full or readd model peer
+    // once blocks have been increased, account can either remove stake in part or in full or readd subnet peer
     let epoch_length = EpochLength::<Test>::get();
     let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<Test>::get();
     System::set_block_number(System::block_number() + epoch_length * min_required_unstake_epochs);
 
-    let remaining_account_stake_balance: u128 = AccountModelStake::<Test>::get(&account(0), model_id.clone());
+    let remaining_account_stake_balance: u128 = AccountSubnetStake::<Test>::get(&account(0), subnet_id.clone());
 
     assert_ok!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         remaining_account_stake_balance,
       )
     );
 
     // should be able to readd after unstaking
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1047,52 +1047,52 @@ fn test_add_model_peer_remove_stake_readd() {
 }
 
 #[test]
-fn test_add_model_peer() {
+fn test_add_subnet_node() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    assert_eq!(Network::total_model_stake(model_id.clone()), amount_staked);
+    assert_eq!(Network::total_model_stake(subnet_id.clone()), amount_staked);
   })
 }
 
 #[test]
-fn test_update_model_peer_peer_id_existing_err() {
+fn test_update_subnet_node_peer_id_existing_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1101,9 +1101,9 @@ fn test_update_model_peer_peer_id_existing_err() {
     );
 
     assert_err!(
-      Network::update_model_peer(
+      Network::update_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
       ),
       Error::<Test>::PeerIdExist
@@ -1112,18 +1112,18 @@ fn test_update_model_peer_peer_id_existing_err() {
 }
 
 #[test]
-fn test_update_model_peer_invalid_epoch_err() {
+fn test_update_subnet_node_invalid_epoch_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -1137,9 +1137,9 @@ fn test_update_model_peer_invalid_epoch_err() {
     EpochLength::<Test>::set(100);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1147,43 +1147,43 @@ fn test_update_model_peer_invalid_epoch_err() {
       )
     );
 
-    make_model_peer_removable();
+    make_subnet_node_removable();
 
     System::set_block_number(System::block_number() - CONSENSUS_STEPS);
 
     assert_err!(
-      Network::update_model_peer(
+      Network::update_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(1),
       ),
-      Error::<Test>::InvalidRemoveOrUpdateModelPeerBlock
+      Error::<Test>::InvalidRemoveOrUpdateSubnetNodeBlock
     );
   });
 }
 
 #[test]
-fn test_update_model_peer_during_invalid_block_err() {
+fn test_update_subnet_node_during_invalid_block_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1191,39 +1191,39 @@ fn test_update_model_peer_during_invalid_block_err() {
       )
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     assert_err!(
-      Network::update_model_peer(
+      Network::update_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(1),
       ),
-      Error::<Test>::InvalidRemoveOrUpdateModelPeerBlock
+      Error::<Test>::InvalidRemoveOrUpdateSubnetNodeBlock
     );
   });
 }
 
 #[test]
-fn test_update_model_peer_during_submit_epoch_err() {
+fn test_update_subnet_node_during_submit_epoch_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1231,39 +1231,39 @@ fn test_update_model_peer_during_submit_epoch_err() {
       )
     );
 
-    make_model_peer_removable();
+    make_subnet_node_removable();
 
     assert_err!(
-      Network::update_model_peer(
+      Network::update_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(1),
       ),
-      Error::<Test>::PeerConsensusSubmitEpochNotReached
+      Error::<Test>::NodeConsensusSubmitEpochNotReached
     );
   });
 }
 
 #[test]
-fn test_update_model_peer() {
+fn test_update_subnet_node() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1271,14 +1271,14 @@ fn test_update_model_peer() {
       )
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    make_model_peer_removable();
+    make_subnet_node_removable();
 
     assert_ok!(
-      Network::update_model_peer(
+      Network::update_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id,
+        subnet_id,
         peer(1),
       )
     );
@@ -1288,23 +1288,23 @@ fn test_update_model_peer() {
 #[test]
 fn test_update_port_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);  
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1315,26 +1315,26 @@ fn test_update_port_err() {
     assert_eq!(Network::total_account_stake(account(0)), amount);    
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     // invalid account
     assert_err!(
       Network::update_port(
         RuntimeOrigin::signed(account(255)),
-        model_id.clone(),
+        subnet_id.clone(),
         65535,
       ),
-      Error::<Test>::ModelPeerNotExist
+      Error::<Test>::SubnetNodeNotExist
     );
 
-    // invalid model
+    // invalid subnet
     assert_err!(
       Network::update_port(
         RuntimeOrigin::signed(account(0)),
         255,
         8889,
       ),
-      Error::<Test>::ModelNotExist
+      Error::<Test>::SubnetNotExist
     );
 
 
@@ -1344,23 +1344,23 @@ fn test_update_port_err() {
 #[test]
 fn test_update_port() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     assert_eq!(Network::total_models(), 1);  
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
@@ -1371,12 +1371,12 @@ fn test_update_port() {
     assert_eq!(Network::total_account_stake(account(0)), amount);    
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     assert_ok!(
       Network::update_port(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         65535,
       )
     );
@@ -1386,51 +1386,51 @@ fn test_update_port() {
 #[test]
 fn test_submit_consensus_min_required_model_epochs() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
-    let min_model_peers: u32 = Network::min_model_peers();
-    let n_peers: u32 = min_model_peers;
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let min_subnet_nodes: u32 = Network::min_subnet_nodes();
+    let n_peers: u32 = min_subnet_nodes;
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     // System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     assert_eq!(Network::total_stake(), amount_staked);
 
-    // make_model_peer_removable();
+    // make_subnet_node_removable();
 
     // System::set_block_number(System::block_number() + CONSENSUS_STEPS + 1);
 
     make_consensus_data_submittable();
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
     assert_err!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
-        model_peer_data_vec.clone(),
+        subnet_id.clone(),
+        subnet_node_data_vec.clone(),
       ),
-      Error::<Test>::ModelInitializeRequirement
+      Error::<Test>::SubnetInitializeRequirement
     );
 
     // let scd = Network::submit_consensus_data(
     //   RuntimeOrigin::signed(account(0)),
-    //   model_id.clone(),
-    //   model_peer_data_vec.clone(),
+    //   subnet_id.clone(),
+    //   subnet_node_data_vec.clone(),
     // );
 
     // assert_eq!(scd.unwrap().pays_fee, Pays::Yes);
@@ -1440,52 +1440,52 @@ fn test_submit_consensus_min_required_model_epochs() {
 #[test]
 fn test_submit_consensus_min_required_peer_epochs() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
-    let min_model_peers: u32 = Network::min_model_peers();
-    let n_peers: u32 = min_model_peers;
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let min_subnet_nodes: u32 = Network::min_subnet_nodes();
+    let n_peers: u32 = min_subnet_nodes;
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     make_consensus_data_submittable();
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     assert_eq!(Network::total_stake(), amount_staked);
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
     assert_err!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
-        model_peer_data_vec.clone(),
+        subnet_id.clone(),
+        subnet_node_data_vec.clone(),
       ),
-      Error::<Test>::PeerConsensusSubmitEpochNotReached
+      Error::<Test>::NodeConsensusSubmitEpochNotReached
     );
   });
 }
 
 #[test]
-fn test_submit_consensus_min_model_peers_err() {
+fn test_submit_consensus_min_subnet_nodes_err() {
   new_test_ext().execute_with(|| {
-    // add first model
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    // add first subnet
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
@@ -1493,37 +1493,37 @@ fn test_submit_consensus_min_model_peers_err() {
 
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       )
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
         
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, 1);
+    let subnet_node_data_vec = subnet_node_data(0, 1);
 
     assert_err!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
-        model_peer_data_vec.clone(),
+        subnet_id.clone(),
+        subnet_node_data_vec.clone(),
       ),
-      Error::<Test>::ModelPeersMin
+      Error::<Test>::SubnetNodesMin
     );
   });
 }
@@ -1532,40 +1532,40 @@ fn test_submit_consensus_min_model_peers_err() {
 #[test]
 fn test_submit_consensus_len_err() {
   new_test_ext().execute_with(|| {
-    // add first model
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    // add first subnet
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers + 1);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers + 1);
 
     assert_err!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(0)),
-        model_id,
-        model_peer_data_vec.clone(),
+        subnet_id,
+        subnet_node_data_vec.clone(),
       ),
       Error::<Test>::ConsensusDataInvalidLen
     );
@@ -1575,44 +1575,44 @@ fn test_submit_consensus_len_err() {
 #[test]
 fn test_submit_consensus_min_peers_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::min_model_peers() - 1;
+    let n_peers: u32 = Network::min_subnet_nodes() - 1;
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let mut amount_staked: u128 = 0;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
     for n in 0..n_peers {
       assert_err!(
         Network::submit_consensus_data(
           RuntimeOrigin::signed(account(n)),
-          model_id,
-          model_peer_data_vec.clone(),
+          subnet_id,
+          subnet_node_data_vec.clone(),
         ) ,
-        Error::<Test>::ModelPeersMin
+        Error::<Test>::SubnetNodesMin
       );
     }
   });
@@ -1622,42 +1622,42 @@ fn test_submit_consensus_min_peers_err() {
 #[test]
 fn test_submit_consensus_already_submitted() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
     
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
     for n in 0..n_peers {
       assert_err!(
         Network::submit_consensus_data(
           RuntimeOrigin::signed(account(n)),
-          model_id.clone(),
-          model_peer_data_vec.clone(),
+          subnet_id.clone(),
+          subnet_node_data_vec.clone(),
         ) ,
         Error::<Test>::ConsensusDataAlreadySubmitted
       );
@@ -1673,50 +1673,50 @@ fn test_submit_consensus_already_submitted() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    assert_eq!(Network::total_model_peers(model_id.clone()), n_peers as u32);
-    post_successful_form_consensus_ensures(model_id.clone())
+    assert_eq!(Network::total_subnet_nodes(subnet_id.clone()), n_peers as u32);
+    post_successful_form_consensus_ensures(subnet_id.clone())
   });
 }
 
 #[test]
 fn test_submit_consensus_account_err() {
   new_test_ext().execute_with(|| {
-    // add first model
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    // add first subnet
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers + 1);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers + 1);
 
     assert_err!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(255)),
-        model_id.clone(),
-        model_peer_data_vec.clone(),
+        subnet_id.clone(),
+        subnet_node_data_vec.clone(),
       ),
-      Error::<Test>::ModelPeerNotExist
+      Error::<Test>::SubnetNodeNotExist
     );
   });
 }
@@ -1724,33 +1724,33 @@ fn test_submit_consensus_account_err() {
 #[test]
 fn test_submit_consensus_model_err() {
   new_test_ext().execute_with(|| {
-    // add first model
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    // add first subnet
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers + 1);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers + 1);
     
     let model_path_fake: Vec<u8> = "petals-team/StableBeluga3".into();
 
@@ -1758,9 +1758,9 @@ fn test_submit_consensus_model_err() {
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(0)),
         0,
-        model_peer_data_vec.clone(),
+        subnet_node_data_vec.clone(),
       ),
-      Error::<Test>::ModelNotExist
+      Error::<Test>::SubnetNotExist
     );
   });
 }
@@ -1768,31 +1768,31 @@ fn test_submit_consensus_model_err() {
 #[test]
 fn test_submit_consensus_data_invalid_consensus_block() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
     // increase blocks to consensus step block
     let epoch_length = EpochLength::<Test>::get();
@@ -1805,8 +1805,8 @@ fn test_submit_consensus_data_invalid_consensus_block() {
       assert_err!(
         Network::submit_consensus_data(
           RuntimeOrigin::signed(account(n)),
-          model_id,
-          model_peer_data_vec.clone(),
+          subnet_id,
+          subnet_node_data_vec.clone(),
         ),
         Error::<Test>::InvalidSubmitEpochLength
       );
@@ -1817,35 +1817,35 @@ fn test_submit_consensus_data_invalid_consensus_block() {
 #[test]
 fn test_submit_consensus_data() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -1857,49 +1857,49 @@ fn test_submit_consensus_data() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
 
-    assert_eq!(Network::total_model_peers(model_id.clone()), n_peers as u32);
+    assert_eq!(Network::total_subnet_nodes(subnet_id.clone()), n_peers as u32);
   });
 }
 
 #[test]
 fn test_submit_consensus_data_invalid_score() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data_invalid_scores(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data_invalid_scores(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data per each peer
     for n in 0..n_peers {
       assert_err!(
         Network::submit_consensus_data(
           RuntimeOrigin::signed(account(n)),
-          model_id,
-          model_peer_data_vec.clone(),
+          subnet_id,
+          subnet_node_data_vec.clone(),
         ),
         Error::<Test>::InvalidScore
       );
@@ -1915,65 +1915,65 @@ fn test_submit_consensus_data_invalid_score() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
 
-    assert_eq!(Network::total_model_peers(1), n_peers as u32);
+    assert_eq!(Network::total_subnet_nodes(1), n_peers as u32);
   });
 }
 
 #[test]
 fn test_submit_consensus_data_dishonest() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
 
     // initialize peer consensus data array
-    // let model_peer_data_vec = model_peer_data(0, n_peers);
+    // let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data per each peer with data minus the last peer
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers-1, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers-1, 0, n_peers);
 
     // last peer is against first peer
-    let model_peer_data_against = model_peer_data(1, n_peers);
+    let subnet_node_data_against = subnet_node_data(1, n_peers);
 
     assert_ok!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(n_peers-1)),
-        model_id.clone(),
-        model_peer_data_against,
+        subnet_id.clone(),
+        subnet_node_data_against,
       ) 
     );
 
     // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-    // the ModelPeerConsensusResults count should always be the count of total model peers
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // Set to correct consensus block
@@ -1986,76 +1986,76 @@ fn test_submit_consensus_data_dishonest() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    assert_eq!(Network::total_model_peers(1), n_peers as u32);
+    assert_eq!(Network::total_subnet_nodes(1), n_peers as u32);
 
     assert_eq!(AccountPenaltyCount::<Test>::get(account(n_peers-1)), 1 as u32);
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
 #[test]
 fn test_submit_consensus_data_remove_peer() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let model_peer_consensus_submit_percent_requirement = Network::model_peer_consensus_submit_percent_requirement();
+    let subnet_node_consensus_submit_percent_requirement = Network::subnet_node_consensus_submit_percent_requirement();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     // Get amount of peers that need to keep a peer absent so they are removed through consensus
-    let n_consensus_peers: u32 = (n_peers as f64 * (model_peer_consensus_submit_percent_requirement as f64 / 10000.0)).ceil() as u32;
+    let n_consensus_peers: u32 = (n_peers as f64 * (subnet_node_consensus_submit_percent_requirement as f64 / 10000.0)).ceil() as u32;
     // starting index of peers that should be removed
     let n_peers_should_be_removed = n_peers - (n_peers - n_consensus_peers);
     
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data per each submitting peer
     // this removes any peer after `n_consensus_peers`
-    build_for_submit_consensus_data(model_id.clone(), 0, n_consensus_peers, 0, n_consensus_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_consensus_peers, 0, n_consensus_peers);
 
     // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-    // the ModelPeerConsensusResults count should always be the count of total model peers
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_consensus_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_consensus_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_consensus_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_consensus_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_consensus_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_consensus_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
 
     
     // n_consensus_peers index should be removed
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).unsuccessful_consensus.len(), n_consensus_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).unsuccessful, n_consensus_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).account_id, account(n_consensus_peers));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).peer_id, peer(n_consensus_peers));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).unsuccessful_consensus.len(), n_consensus_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).unsuccessful, n_consensus_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).account_id, account(n_consensus_peers));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).peer_id, peer(n_consensus_peers));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -2067,14 +2067,14 @@ fn test_submit_consensus_data_remove_peer() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
 
     // peers should be removed
-    assert_eq!(Network::total_model_peers(1), n_consensus_peers as u32);
+    assert_eq!(Network::total_subnet_nodes(1), n_consensus_peers as u32);
 
     // ensure all expected to be removed peers are removed and data is represented correctly
     for n in n_consensus_peers..n_peers {
-      post_remove_model_peer_ensures(n, model_id.clone());
+      post_remove_subnet_node_ensures(n, subnet_id.clone());
     }
   });
 }
@@ -2082,65 +2082,65 @@ fn test_submit_consensus_data_remove_peer() {
 #[test]
 fn test_submit_consensus_data_consensus_submit_percent_requirement() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let model_peer_consensus_submit_percent_requirement = Network::model_peer_consensus_submit_percent_requirement();
+    let subnet_node_consensus_submit_percent_requirement = Network::subnet_node_consensus_submit_percent_requirement();
 
-    let n_peers: u32 = Network::max_model_peers();
-    let n_required_peers: u32 = (n_peers as f64 * (model_peer_consensus_submit_percent_requirement as f64 / 10000.0)).floor() as u32;
+    let n_peers: u32 = Network::max_subnet_nodes();
+    let n_required_peers: u32 = (n_peers as f64 * (subnet_node_consensus_submit_percent_requirement as f64 / 10000.0)).floor() as u32;
     // Get 1 less of peers required to submit consensus data so consensus isn't calculated
     let n_consensus_peers: u32 = n_required_peers - 1;
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    // let model_peer_data_vec = model_peer_data(0, n_peers);
+    // let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data with not enough peers with data on each peer
-    build_for_submit_consensus_data(model_id.clone(), 0, n_consensus_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_consensus_peers, 0, n_peers);
 
     // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-    // the ModelPeerConsensusResults count should always be the count of total model peers
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // peer consensus data is identical so data should all match, checking first and last peer 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_consensus_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_consensus_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_consensus_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
-    // assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).unsuccessful_consensus.len(), n_consensus_peers as usize);
-    // assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).unsuccessful, n_consensus_peers as u32);
-    // assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).account_id, account(n_consensus_peers));
-    // assert_eq!(Network::model_peer_consensus_results(1, account(n_consensus_peers)).peer_id, peer(n_consensus_peers));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_consensus_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_consensus_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_consensus_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
+    // assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).unsuccessful_consensus.len(), n_consensus_peers as usize);
+    // assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).unsuccessful, n_consensus_peers as u32);
+    // assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).account_id, account(n_consensus_peers));
+    // assert_eq!(Network::subnet_node_consensus_results(1, account(n_consensus_peers)).peer_id, peer(n_consensus_peers));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -2154,14 +2154,14 @@ fn test_submit_consensus_data_consensus_submit_percent_requirement() {
 
     // nothing should change
     // consensus is remo ed
-    assert_eq!(Network::total_model_peers(model_id.clone()), n_peers);
-    // assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), 0 as usize);
+    assert_eq!(Network::total_subnet_nodes(subnet_id.clone()), n_peers);
+    // assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), 0 as usize);
 
-    // models ModelConsensusEpochsErrors should now increment 1
+    // subnets SubnetConsensusEpochsErrors should now increment 1
     // when not enough peers submit data or do not unconfirm data errors should increment
-    assert_eq!(ModelConsensusEpochsErrors::<Test>::get(model_id.clone()), 1);
+    assert_eq!(SubnetConsensusEpochsErrors::<Test>::get(subnet_id.clone()), 1);
 
-    post_successful_form_consensus_ensures(model_id.clone())
+    post_successful_form_consensus_ensures(subnet_id.clone())
 
   });
 }
@@ -2173,44 +2173,44 @@ fn test_generate_emissions() {
     // min = peer_count * 10000
     StakeVaultBalance::<Test>::mutate(|n: &mut u128| *n += 4000000000000000000000);
     
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000; // 1000.00 tokens
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    // let model_peer_data_vec = model_peer_data(0, n_peers);
+    // let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data per each peer
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
     // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-    // the ModelPeerConsensusResults count should always be the count of total model peers
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // Set to correct consensus block
@@ -2223,9 +2223,9 @@ fn test_generate_emissions() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
 
-    assert_eq!(Network::total_model_peers(1), n_peers as u32);
+    assert_eq!(Network::total_subnet_nodes(1), n_peers as u32);
 
     // stake data should exist
     let total_stake: u128 = TotalStake::<Test>::get();
@@ -2246,18 +2246,18 @@ fn test_generate_emissions() {
 
     post_successful_generate_emissions_ensures();
 
-    // ModelPeerConsensusResults is removed on successful emissions generation
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // SubnetNodeConsensusResults is removed on successful emissions generation
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			0, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // ensure balances have increased
     for n in 0..n_peers {
-      let stake_balance = Network::account_model_stake(account(n), model_id);
+      let stake_balance = Network::account_model_stake(account(n), subnet_id);
       assert_ne!(amount, stake_balance);
     }
 
@@ -2281,14 +2281,14 @@ fn test_generate_emissions_all_math() {
   new_test_ext().execute_with(|| {
     StakeVaultBalance::<Test>::mutate(|n: &mut u128| *n += 480000000000000000000u128);
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
     let n_models: u32 = Network::max_models();
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
     for m in 0..n_models {
-			let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
-      build_model(model_path.clone());
+			let subnet_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
+      build_subnet(subnet_path.clone());
     }
 
     make_model_submittable();
@@ -2379,21 +2379,21 @@ fn test_generate_emissions_all_math() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    // add model peers
+    // add subnet peers
     for m in 0..n_models {
-			let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
-      let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+			let subnet_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
+      let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
       let amount: u128 = amount_stake[m as usize] as u128;
 
-      // amount_staked += build_model_peers(model_id.clone(), 0, n_peers as u8, amount + deposit_amount, amount);
+      // amount_staked += build_subnet_nodes(subnet_id.clone(), 0, n_peers as u8, amount + deposit_amount, amount);
 
       for n in 0..n_peers {
         let _ = Balances::deposit_creating(&account(n), amount + deposit_amount);
         amount_staked += amount;
         assert_ok!(
-          Network::add_model_peer(
+          Network::add_subnet_node(
             RuntimeOrigin::signed(account(n)),
-            model_id.clone(),
+            subnet_id.clone(),
             peer(n),
             "172.20.54.234".into(),
             8888,
@@ -2401,7 +2401,7 @@ fn test_generate_emissions_all_math() {
           ) 
         );
       } 
-      assert_eq!(Network::total_model_peers(model_id.clone()), (n_peers) as u32);
+      assert_eq!(Network::total_subnet_nodes(subnet_id.clone()), (n_peers) as u32);
     }
 
     // assert stake is correct to what's expected
@@ -2409,24 +2409,24 @@ fn test_generate_emissions_all_math() {
     assert_eq!(total_stake, stake_sum);
 
     // initialize peer consensus data array
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    // submit peer consensus data per model per each peer
+    // submit peer consensus data per subnet per each peer
     for m in 0..n_models {
-			let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
-      let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+			let subnet_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
+      let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
       // submit peer consensus data per each peer
-      build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+      build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
       // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-      // the ModelPeerConsensusResults count should always be the count of total model peers
-      let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+      // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+      let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
       let len = submissions.count();
       assert_eq!(
         len, 
         n_peers as usize, 
-        "ModelPeerConsensusResults len mismatch."
+        "SubnetNodeConsensusResults len mismatch."
       );  
     }
 
@@ -2441,9 +2441,9 @@ fn test_generate_emissions_all_math() {
     );
 
     for m in 0..n_models {
-      let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
-      let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
-      post_successful_form_consensus_ensures(model_id.clone());
+      let subnet_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
+      let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
+      post_successful_form_consensus_ensures(subnet_id.clone());
     }
 
     // // stake data should exist
@@ -2466,11 +2466,11 @@ fn test_generate_emissions_all_math() {
     
     // ensure balances have increased
     for m in 0..n_models {
-      let model_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
-      let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+      let subnet_path: Vec<u8> = format!("petals-team-{m}/StableBeluga").into();
+      let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
       let amount: u128 = amount_stake[m as usize] as u128;
       for n in 0..n_peers {
-        let stake_balance = Network::account_model_stake(account(n), model_id);
+        let stake_balance = Network::account_model_stake(account(n), subnet_id);
         assert_ne!(amount, stake_balance);
       }
     }
@@ -2494,44 +2494,44 @@ fn test_generate_emissions_all_math() {
 #[test]
 fn test_generate_emissionsf() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000; // 1000.00 tokens
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     // initialize peer consensus data array
-    // let model_peer_data_vec = model_peer_data(0, n_peers);
+    // let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data per each peer
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
     // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-    // the ModelPeerConsensusResults count should always be the count of total model peers
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // Set to correct consensus block
@@ -2544,9 +2544,9 @@ fn test_generate_emissionsf() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
 
-    assert_eq!(Network::total_model_peers(1), n_peers as u32);
+    assert_eq!(Network::total_subnet_nodes(1), n_peers as u32);
 
     // stake data should exist
     let total_stake: u128 = TotalStake::<Test>::get();
@@ -2564,18 +2564,18 @@ fn test_generate_emissionsf() {
 
     post_successful_generate_emissions_ensures();
 
-    // ModelPeerConsensusResults is removed on successful emissions generation
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // SubnetNodeConsensusResults is removed on successful emissions generation
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			0, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // ensure balances have increased
     for n in 0..n_peers {
-      let stake_balance = Network::account_model_stake(account(n), model_id);
+      let stake_balance = Network::account_model_stake(account(n), subnet_id);
       assert_ne!(amount, stake_balance);
     }
   });
@@ -2584,55 +2584,55 @@ fn test_generate_emissionsf() {
 #[test]
 fn test_remove_peer_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(255)),
         0,
       ),
-      Error::<Test>::ModelNotExist
+      Error::<Test>::SubnetNotExist
     );
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       1,
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     assert_eq!(Network::total_stake(), amount);
 
     assert_err!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(255)),
-        model_id.clone(),
+        subnet_id.clone(),
       ),
-      Error::<Test>::ModelPeerNotExist
+      Error::<Test>::SubnetNodeNotExist
     );
 
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
   });
 }
@@ -2640,57 +2640,57 @@ fn test_remove_peer_err() {
 #[test]
 fn test_remove_peer_is_included_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     // System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(255)),
         0,
       ),
-      Error::<Test>::ModelNotExist
+      Error::<Test>::SubnetNotExist
     );
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       1,
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     assert_eq!(Network::total_stake(), amount);
 
-    make_model_peer_included();
+    make_subnet_node_included();
 
     assert_err!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       ),
-      Error::<Test>::InvalidRemoveOrUpdateModelPeerBlock
+      Error::<Test>::InvalidRemoveOrUpdateSubnetNodeBlock
     );
 
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
   });
 }
@@ -2699,14 +2699,14 @@ fn test_remove_peer_is_included_err() {
 #[test]
 fn test_remove_peer_unstake_epochs_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -2715,44 +2715,44 @@ fn test_remove_peer_unstake_epochs_err() {
     System::set_block_number(System::block_number() + epoch_length);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
 
-    // make_model_peer_removable();
+    // make_subnet_node_removable();
 
 
     System::set_block_number(System::block_number() + epoch_length);
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       ) 
     );
 
-    post_remove_model_peer_ensures(0, model_id.clone());
+    post_remove_subnet_node_ensures(0, subnet_id.clone());
 
-    assert_eq!(Network::total_model_peers(1), 0);
+    assert_eq!(Network::total_subnet_nodes(1), 0);
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ),
       Error::<Test>::RequiredUnstakeEpochsNotMet,
@@ -2765,7 +2765,7 @@ fn test_remove_peer_unstake_epochs_err() {
     assert_ok!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       )
     );
@@ -2775,44 +2775,44 @@ fn test_remove_peer_unstake_epochs_err() {
 #[test]
 fn test_remove_peer_unstake_total_balance() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       ) 
     );
 
-    post_remove_model_peer_ensures(0, model_id.clone());
+    post_remove_subnet_node_ensures(0, subnet_id.clone());
 
-    assert_eq!(Network::total_model_peers(1), 0);
+    assert_eq!(Network::total_subnet_nodes(1), 0);
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
     
@@ -2820,17 +2820,17 @@ fn test_remove_peer_unstake_total_balance() {
     let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<Test>::get();
     System::set_block_number(System::block_number() + epoch_length * min_required_unstake_epochs);
     
-    let remaining_account_stake_balance: u128 = AccountModelStake::<Test>::get(&account(0), model_id.clone());
+    let remaining_account_stake_balance: u128 = AccountSubnetStake::<Test>::get(&account(0), subnet_id.clone());
 
     assert_ok!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         remaining_account_stake_balance,
       )
     );
 
-    post_remove_unstake_ensures(0, model_id.clone());
+    post_remove_unstake_ensures(0, subnet_id.clone());
   });
 }
 
@@ -2838,47 +2838,47 @@ fn test_remove_peer_unstake_total_balance() {
 #[test]
 fn test_remove_peer() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
 
-    // make_model_peer_removable();
+    // make_subnet_node_removable();
     // should be able to be removed is initialization period doesn't reach inclusion epochs
 
     assert_ok!(
-      Network::remove_model_peer(
+      Network::remove_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
       ) 
     );
-    post_remove_model_peer_ensures(0, model_id.clone());
-    assert_eq!(Network::total_model_peers(1), 0);
+    post_remove_subnet_node_ensures(0, subnet_id.clone());
+    assert_eq!(Network::total_subnet_nodes(1), 0);
 
   });
 }
@@ -2898,34 +2898,34 @@ fn test_add_to_stake_err() {
         0,
         amount,
       ),
-      Error::<Test>::ModelNotExist,
+      Error::<Test>::SubnetNotExist,
     );
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);
     assert_eq!(Network::total_stake(), amount);
@@ -2936,10 +2936,10 @@ fn test_add_to_stake_err() {
     assert_err!(
       Network::add_to_stake(
         RuntimeOrigin::signed(account(255)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ),
-      Error::<Test>::ModelPeerNotExist,
+      Error::<Test>::SubnetNodeNotExist,
     );
 
   });
@@ -2948,42 +2948,42 @@ fn test_add_to_stake_err() {
 #[test]
 fn test_add_to_stake() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
       Network::add_to_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ) 
     );
@@ -3006,57 +3006,57 @@ fn test_remove_stake_err() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    // attempt to remove on non-existent model_id
+    // attempt to remove on non-existent subnet_id
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(255)),
         0,
         amount,
       ),
-      Error::<Test>::ModelPeerNotExist,
+      Error::<Test>::SubnetNodeNotExist,
     );
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    build_subnet(subnet_path.clone());
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(255)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ),
-      Error::<Test>::ModelPeerNotExist,
+      Error::<Test>::SubnetNodeNotExist,
     );
 
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         0,
       ),
       Error::<Test>::RequiredUnstakeEpochsNotMet,
@@ -3069,7 +3069,7 @@ fn test_remove_stake_err() {
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         0,
       ),
       Error::<Test>::NotEnoughStakeToWithdraw,
@@ -3078,7 +3078,7 @@ fn test_remove_stake_err() {
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount+1,
       ),
       Error::<Test>::NotEnoughStakeToWithdraw,
@@ -3087,7 +3087,7 @@ fn test_remove_stake_err() {
     assert_err!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ),
       Error::<Test>::MinStakeNotReached,
@@ -3099,37 +3099,37 @@ fn test_remove_stake_err() {
 #[test]
 fn test_remove_stake() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 
-    build_model(model_path.clone());
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    build_subnet(subnet_path.clone());
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
     assert_ok!(
-      Network::add_model_peer(
+      Network::add_subnet_node(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         "172.20.54.234".into(),
         8888,
         amount,
       ) 
     );
-    post_successful_add_model_peer_asserts(0, model_id.clone(), amount);
+    post_successful_add_subnet_node_asserts(0, subnet_id.clone(), amount);
 
     assert_eq!(Network::account_model_stake(account(0), 1), amount);
     assert_eq!(Network::total_account_stake(account(0)), amount);      
     assert_eq!(Network::total_stake(), amount);
     assert_eq!(Network::total_model_stake(1), amount);
-    assert_eq!(Network::total_model_peers(1), 1);
+    assert_eq!(Network::total_subnet_nodes(1), 1);
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
@@ -3137,7 +3137,7 @@ fn test_remove_stake() {
     assert_ok!(
       Network::add_to_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ) 
     );
@@ -3157,7 +3157,7 @@ fn test_remove_stake() {
     assert_ok!(
       Network::remove_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       )
     );
@@ -3170,174 +3170,174 @@ fn test_remove_stake() {
   });
 }
 
-#[test]
-fn test_form_consensus_unconfirm_consensus() {
-  new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+// #[test]
+// fn test_form_consensus_unconfirm_consensus() {
+//   new_test_ext().execute_with(|| {
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
-    let unconfirm_threshold = ModelConsensusUnconfirmedThreshold::<Test>::get();
-    let n_peers_unconfirm: u32 = (n_peers as f64 * (unconfirm_threshold as f64 / 10000.0)).ceil() as u32;
+//     let n_peers: u32 = Network::max_subnet_nodes();
+//     let unconfirm_threshold = SubnetConsensusUnconfirmedThreshold::<Test>::get();
+//     let n_peers_unconfirm: u32 = (n_peers as f64 * (unconfirm_threshold as f64 / 10000.0)).ceil() as u32;
 
-    build_model(model_path.clone());
-    make_model_submittable();
+//     build_subnet(subnet_path.clone());
+//     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
-    let deposit_amount: u128 = 1000000000000000000000000;
-    let amount: u128 = 1000000000000000000000;
+//     let deposit_amount: u128 = 1000000000000000000000000;
+//     let amount: u128 = 1000000000000000000000;
 
-    System::set_block_number(System::block_number() + CONSENSUS_STEPS);
+//     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
-    // for n in 0..n_peers {
-    //   let _ = Balances::deposit_creating(&account(n), deposit_amount);
-    //   amount_staked += amount;
-    //   assert_ok!(
-    //     Network::add_model_peer(
-    //       RuntimeOrigin::signed(account(n)),
-    //       model_id.clone(),
-    //       peer(n),
-    //       "172.20.54.234".into(),
-		// 			8888,
-    //       amount,
-    //     ) 
-    //   );
-    //   post_successful_add_model_peer_asserts(n, model_id.clone(), amount);
-    // }
-    assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
-      n_peers.into(),
-      amount,
-      model_id.clone(),
-    );
+//     // for n in 0..n_peers {
+//     //   let _ = Balances::deposit_creating(&account(n), deposit_amount);
+//     //   amount_staked += amount;
+//     //   assert_ok!(
+//     //     Network::add_subnet_node(
+//     //       RuntimeOrigin::signed(account(n)),
+//     //       subnet_id.clone(),
+//     //       peer(n),
+//     //       "172.20.54.234".into(),
+// 		// 			8888,
+//     //       amount,
+//     //     ) 
+//     //   );
+//     //   post_successful_add_subnet_node_asserts(n, subnet_id.clone(), amount);
+//     // }
+//     assert_eq!(Network::total_stake(), amount_staked);
+//     post_successful_add_subnet_nodes_asserts(
+//       n_peers.into(),
+//       amount,
+//       subnet_id.clone(),
+//     );
 
-    make_model_peer_consensus_data_submittable();
+//     make_subnet_node_consensus_data_submittable();
 
-    // submit peer consensus data per each peer
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+//     // submit peer consensus data per each peer
+//     build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
-    // unconfirm consensus data up to the required threshold
-    for n in 0..n_peers_unconfirm {
-      assert_ok!(
-        Network::unconfirm_consensus_data(
-          RuntimeOrigin::signed(account(n)),
-          model_id,
-        ) 
-      );
-    }
+//     // unconfirm consensus data up to the required threshold
+//     for n in 0..n_peers_unconfirm {
+//       assert_ok!(
+//         Network::unconfirm_consensus_data(
+//           RuntimeOrigin::signed(account(n)),
+//           subnet_id,
+//         ) 
+//       );
+//     }
 
-    // Set to correct consensus block
-    let epoch_length = EpochLength::<Test>::get();
-    System::set_block_number(
-      epoch_length + (System::block_number() - (System::block_number() % epoch_length))
-    );
+//     // Set to correct consensus block
+//     let epoch_length = EpochLength::<Test>::get();
+//     System::set_block_number(
+//       epoch_length + (System::block_number() - (System::block_number() % epoch_length))
+//     );
 
-    assert_ok!(
-      Network::form_consensus(RuntimeOrigin::signed(account(0))) 
-    );
+//     assert_ok!(
+//       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
+//     );
     
 
-    // unconfirming consensus data should remove all ModelPeerConsensusResults
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
-		let len = submissions.count();
-		assert_eq!(
-			len, 
-			0, 
-			"ModelPeerConsensusResults len mismatch."
-		);
+//     // unconfirming consensus data should remove all SubnetNodeConsensusResults
+//     let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
+// 		let len = submissions.count();
+// 		assert_eq!(
+// 			len, 
+// 			0, 
+// 			"SubnetNodeConsensusResults len mismatch."
+// 		);
 
-    let max_model_model_unconfirmed_epochs = MaxModelConsensusUnconfirmedConsecutiveEpochs::<Test>::get();
+//     let max_model_model_unconfirmed_epochs = MaxSubnetConsensusUnconfirmedConsecutiveEpochs::<Test>::get();
 
-    // Should have increased uncofirmed epochs count
-    let model_uncofirmed_epochs = ModelConsensusUnconfirmedConsecutiveEpochsCount::<Test>::get(model_id.clone());
-		assert_eq!(model_uncofirmed_epochs, 1, "ModelConsensusUnconfirmedConsecutiveEpochsCount incorrect.");
+//     // Should have increased uncofirmed epochs count
+//     let model_uncofirmed_epochs = SubnetConsensusUnconfirmedConsecutiveEpochsCount::<Test>::get(subnet_id.clone());
+// 		assert_eq!(model_uncofirmed_epochs, 1, "SubnetConsensusUnconfirmedConsecutiveEpochsCount incorrect.");
 
-    if model_uncofirmed_epochs > max_model_model_unconfirmed_epochs {
-      let model_epoch_errors = ModelConsensusEpochsErrors::<Test>::get(model_id.clone());
-      assert_eq!(model_epoch_errors, 1, "ModelConsensusEpochsErrors incorrect.");  
-    } else {
-      let model_epoch_errors = ModelConsensusEpochsErrors::<Test>::get(model_id.clone());
-      assert_eq!(model_epoch_errors, 0, "ModelConsensusEpochsErrors incorrect.");  
-    }
+//     if model_uncofirmed_epochs > max_model_model_unconfirmed_epochs {
+//       let model_epoch_errors = SubnetConsensusEpochsErrors::<Test>::get(subnet_id.clone());
+//       assert_eq!(model_epoch_errors, 1, "SubnetConsensusEpochsErrors incorrect.");  
+//     } else {
+//       let model_epoch_errors = SubnetConsensusEpochsErrors::<Test>::get(subnet_id.clone());
+//       assert_eq!(model_epoch_errors, 0, "SubnetConsensusEpochsErrors incorrect.");  
+//     }
 
-    post_successful_form_consensus_ensures(model_id.clone());
-  });
-}
+//     post_successful_form_consensus_ensures(subnet_id.clone());
+//   });
+// }
 
-#[test]
-fn test_submit_data_consensus_as_err_then_unconfirm_consensus_err() {
-  new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+// #[test]
+// fn test_submit_data_consensus_as_err_then_unconfirm_consensus_err() {
+//   new_test_ext().execute_with(|| {
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
-    let unconfirm_threshold = ModelConsensusUnconfirmedThreshold::<Test>::get();
-    let n_peers_unconfirm: u32 = (n_peers as f64 * (unconfirm_threshold as f64 / 10000.0)).ceil() as u32;
+//     let n_peers: u32 = Network::max_subnet_nodes();
+//     let unconfirm_threshold = SubnetConsensusUnconfirmedThreshold::<Test>::get();
+//     let n_peers_unconfirm: u32 = (n_peers as f64 * (unconfirm_threshold as f64 / 10000.0)).ceil() as u32;
 
-    build_model(model_path.clone());
-    make_model_submittable();
+//     build_subnet(subnet_path.clone());
+//     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
-    let deposit_amount: u128 = 1000000000000000000000000;
-    let amount: u128 = 1000000000000000000000;
+//     let deposit_amount: u128 = 1000000000000000000000000;
+//     let amount: u128 = 1000000000000000000000;
 
-    System::set_block_number(System::block_number() + CONSENSUS_STEPS);
+//     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
-    assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
-      n_peers.into(),
-      amount,
-      model_id.clone(),
-    );
+//     assert_eq!(Network::total_stake(), amount_staked);
+//     post_successful_add_subnet_nodes_asserts(
+//       n_peers.into(),
+//       amount,
+//       subnet_id.clone(),
+//     );
 
-    make_model_peer_consensus_data_submittable();
+//     make_subnet_node_consensus_data_submittable();
 
-    let model_peer_data_vec = model_peer_data(0, n_peers);
+//     let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-    // submit consensus data through `unconfirm_consensus_data`
-    // assert_ok!(
-    //   Network::submit_consensus_data(
-    //     RuntimeOrigin::signed(account(0)),
-    //     model_id,
-    //     model_peer_data_vec.clone(),
-    //   ) 
-    // );
+//     // submit consensus data through `unconfirm_consensus_data`
+//     // assert_ok!(
+//     //   Network::submit_consensus_data(
+//     //     RuntimeOrigin::signed(account(0)),
+//     //     subnet_id,
+//     //     subnet_node_data_vec.clone(),
+//     //   ) 
+//     // );
 
-    assert_ok!(
-      Network::unconfirm_consensus_data(
-        RuntimeOrigin::signed(account(0)),
-        model_id,
-      )
-    );
+//     assert_ok!(
+//       Network::unconfirm_consensus_data(
+//         RuntimeOrigin::signed(account(0)),
+//         subnet_id,
+//       )
+//     );
 
-    // cannot call `unconfirm_consensus_data` if already submitted consensus data with an error state
-    assert_err!(
-      Network::unconfirm_consensus_data(
-        RuntimeOrigin::signed(account(0)),
-        model_id,
-      ),
-      Error::<Test>::ConsensusDataAlreadyUnconfirmed
-    );
-  });
-}
+//     // cannot call `unconfirm_consensus_data` if already submitted consensus data with an error state
+//     assert_err!(
+//       Network::unconfirm_consensus_data(
+//         RuntimeOrigin::signed(account(0)),
+//         subnet_id,
+//       ),
+//       Error::<Test>::ConsensusDataAlreadyUnconfirmed
+//     );
+//   });
+// }
 
 #[test]
 fn test_form_consensus() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     
     // increase blocks
     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -3345,28 +3345,28 @@ fn test_form_consensus() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -3378,25 +3378,25 @@ fn test_form_consensus() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
 #[test]
 fn test_form_consensus_with_3_peers() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    MinModelPeers::<Test>::set(3);
+    MinSubnetNodes::<Test>::set(3);
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     let n_peers: u32 = 3;
     
     // increase blocks
     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -3404,28 +3404,28 @@ fn test_form_consensus_with_3_peers() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -3437,7 +3437,7 @@ fn test_form_consensus_with_3_peers() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
@@ -3445,18 +3445,18 @@ fn test_form_consensus_with_3_peers() {
 #[test]
 fn test_form_consensus_with_4_peers() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    MinModelPeers::<Test>::set(4);
+    MinSubnetNodes::<Test>::set(4);
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     let n_peers: u32 = 4;
     
     // increase blocks
     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -3464,28 +3464,28 @@ fn test_form_consensus_with_4_peers() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -3497,25 +3497,25 @@ fn test_form_consensus_with_4_peers() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
 #[test]
 fn test_form_consensus_with_5_peers() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    MinModelPeers::<Test>::set(5);
+    MinSubnetNodes::<Test>::set(5);
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
     let n_peers: u32 = 5;
     
     // increase blocks
     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -3523,28 +3523,28 @@ fn test_form_consensus_with_5_peers() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -3556,26 +3556,26 @@ fn test_form_consensus_with_5_peers() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
 #[test]
 fn test_form_consensus_remove_peer() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
 
-    let peer_removal_threshold = PeerRemovalThreshold::<Test>::get();
+    let peer_removal_threshold = NodeRemovalThreshold::<Test>::get();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     let n_required_against_peers: u32 = (n_peers as f64 * (peer_removal_threshold as f64 / 10000.0)).ceil() as u32 + 1;
     
     // increase blocks
     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -3583,25 +3583,25 @@ fn test_form_consensus_remove_peer() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    let model_peer_data_vec = model_peer_data(0, n_peers-1);
+    let subnet_node_data_vec = subnet_node_data(0, n_peers-1);
 
     for n in 0..n_required_against_peers {
       assert_ok!(
         Network::submit_consensus_data(
           RuntimeOrigin::signed(account(n)),
-          model_id,
-          model_peer_data_vec.clone(),
+          subnet_id,
+          subnet_node_data_vec.clone(),
         ) 
       );  
     }
@@ -3616,23 +3616,23 @@ fn test_form_consensus_remove_peer() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
 
-    post_remove_model_peer_ensures((n_peers - 1) as u32, model_id.clone());
+    post_remove_subnet_node_ensures((n_peers - 1) as u32, subnet_id.clone());
   });
 }
 
 #[test]
 fn test_form_consensus_peer_submission_epochs() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -3640,28 +3640,28 @@ fn test_form_consensus_peer_submission_epochs() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers, 0, n_peers);
 
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).successful, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).total_submits, n_peers as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).account_id, account(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(0)).peer_id, peer(0));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
-    assert_eq!(Network::model_peer_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful_consensus.len(), n_peers as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).successful, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).total_submits, n_peers as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).account_id, account(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(0)).peer_id, peer(0));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful_consensus.len(), 0 as usize);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).unsuccessful, 0 as u32);
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).account_id, account(n_peers-1));
+    assert_eq!(Network::subnet_node_consensus_results(1, account(n_peers-1)).peer_id, peer(n_peers-1));
 
     // Set to correct consensus block
     let epoch_length = EpochLength::<Test>::get();
@@ -3673,7 +3673,7 @@ fn test_form_consensus_peer_submission_epochs() {
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
@@ -3716,63 +3716,63 @@ fn test_percent_div() {
 #[test]
 fn test_submit_consensus_data_remove_peer_peer_against_consensus_removal_threshold() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let model_peer_consensus_submit_percent_requirement = Network::model_peer_consensus_submit_percent_requirement();
-    let peer_against_consensus_removal_threshold: u128 = PeerAgainstConsensusRemovalThreshold::<Test>::get();
+    let subnet_node_consensus_submit_percent_requirement = Network::subnet_node_consensus_submit_percent_requirement();
+    let peer_against_consensus_removal_threshold: u128 = NodeAgainstConsensusRemovalThreshold::<Test>::get();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
     // Get amount of peers that need to keep a peer absent so they are removed through consensus
-    let n_consensus_peers: u32 = (n_peers as f64 * (model_peer_consensus_submit_percent_requirement as f64 / 10000.0)).ceil() as u32;
+    let n_consensus_peers: u32 = (n_peers as f64 * (subnet_node_consensus_submit_percent_requirement as f64 / 10000.0)).ceil() as u32;
     // starting index of peers that should be removed
     let n_peers_should_be_removed = n_peers - (n_peers - n_consensus_peers);
     
     let n_peers_threshold = Network::percent_mul_round_up(n_peers as u128, peer_against_consensus_removal_threshold);
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
-    make_model_peer_consensus_data_submittable();
+    make_subnet_node_consensus_data_submittable();
 
     // submit peer consensus data per each peer with data minus submitting on behalf of the last peer
-    build_for_submit_consensus_data(model_id.clone(), 0, n_peers-1, 0, n_peers);
+    build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers-1, 0, n_peers);
 
     // last peer is against first peers threshold of peers to be removed
     // when being against these percentage of peers
-    let model_peer_data_against = model_peer_data((n_peers_threshold - 1) as u32, n_peers);
+    let subnet_node_data_against = subnet_node_data((n_peers_threshold - 1) as u32, n_peers);
 
     assert_ok!(
       Network::submit_consensus_data(
         RuntimeOrigin::signed(account(n_peers-1)),
-        model_id.clone(),
-        model_peer_data_against,
+        subnet_id.clone(),
+        subnet_node_data_against,
       ) 
     );
     
     // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-    // the ModelPeerConsensusResults count should always be the count of total model peers
-    let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+    // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+    let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
 		let len = submissions.count();
 		assert_eq!(
 			len, 
 			n_peers as usize, 
-			"ModelPeerConsensusResults len mismatch."
+			"SubnetNodeConsensusResults len mismatch."
 		);
 
     // Set to correct consensus block
@@ -3785,39 +3785,39 @@ fn test_submit_consensus_data_remove_peer_peer_against_consensus_removal_thresho
       Network::form_consensus(RuntimeOrigin::signed(account(0))) 
     );
 
-    assert_eq!(Network::total_model_peers(model_id.clone()), (n_peers - 1) as u32);
+    assert_eq!(Network::total_subnet_nodes(subnet_id.clone()), (n_peers - 1) as u32);
 
     assert_eq!(AccountPenaltyCount::<Test>::get(account(n_peers-1)), (n_peers_threshold) as u32);
 
-    post_remove_model_peer_ensures((n_peers - 1) as u32, model_id.clone());
+    post_remove_subnet_node_ensures((n_peers - 1) as u32, subnet_id.clone());
 
-    post_successful_form_consensus_ensures(model_id.clone());
+    post_successful_form_consensus_ensures(subnet_id.clone());
   });
 }
 
 #[test]
-fn test_form_consensus_remove_ineligible_model_peer() {
+fn test_form_consensus_remove_ineligible_subnet_node() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    let n_peers: u32 = Network::max_model_peers();
+    let n_peers: u32 = Network::max_subnet_nodes();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     make_model_submittable();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
     assert_eq!(Network::total_stake(), amount_staked);
-    post_successful_add_model_peers_asserts(
+    post_successful_add_subnet_nodes_asserts(
       n_peers.into(),
       amount,
-      model_id.clone(),
+      subnet_id.clone(),
     );
 
     let max_account_penalty_count: u32 = MaxAccountPenaltyCount::<Test>::get();
@@ -3826,9 +3826,9 @@ fn test_form_consensus_remove_ineligible_model_peer() {
     for n in 0..max_account_penalty_count {
       let dishonest_peer_account_penalty_count = AccountPenaltyCount::<Test>::get(account(n_peers-1));
 
-      let total_model_peers: u32 = Network::total_model_peers(model_id.clone());
+      let total_subnet_nodes: u32 = Network::total_subnet_nodes(subnet_id.clone());
 
-      if total_model_peers < n_peers {
+      if total_subnet_nodes < n_peers {
         break
       }
 
@@ -3837,30 +3837,30 @@ fn test_form_consensus_remove_ineligible_model_peer() {
       }
 
       // initialize peer consensus data array
-      make_model_peer_consensus_data_submittable();
+      make_subnet_node_consensus_data_submittable();
 
       // submit peer consensus data per each peer with data minus the last peer
-      build_for_submit_consensus_data(model_id.clone(), 0, n_peers-1, 0, n_peers);
+      build_for_submit_consensus_data(subnet_id.clone(), 0, n_peers-1, 0, n_peers);
 
       // last peer is against first peer
-      let model_peer_data_against = model_peer_data(1, n_peers);
+      let subnet_node_data_against = subnet_node_data(1, n_peers);
 
       assert_ok!(
         Network::submit_consensus_data(
           RuntimeOrigin::signed(account(n_peers-1)),
-          model_id.clone(),
-          model_peer_data_against,
+          subnet_id.clone(),
+          subnet_node_data_against,
         ) 
       );
 
       // if any peers are left out, they submitted as unsuccessful and unsuccessful_consensus
-      // the ModelPeerConsensusResults count should always be the count of total model peers
-      let submissions = ModelPeerConsensusResults::<Test>::iter_key_prefix(model_id.clone());
+      // the SubnetNodeConsensusResults count should always be the count of total subnet peers
+      let submissions = SubnetNodeConsensusResults::<Test>::iter_key_prefix(subnet_id.clone());
       let len = submissions.count();
       assert_eq!(
         len, 
         n_peers as usize, 
-        "ModelPeerConsensusResults len mismatch."
+        "SubnetNodeConsensusResults len mismatch."
       );
 
       // Set to correct consensus block
@@ -3872,47 +3872,47 @@ fn test_form_consensus_remove_ineligible_model_peer() {
         Network::form_consensus(RuntimeOrigin::signed(account(0))) 
       );
 
-      post_successful_form_consensus_ensures(model_id.clone());
+      post_successful_form_consensus_ensures(subnet_id.clone());
     }
 
-    assert_eq!(Network::total_model_peers(model_id.clone()), (n_peers - 1) as u32);
+    assert_eq!(Network::total_subnet_nodes(subnet_id.clone()), (n_peers - 1) as u32);
 
     assert!(AccountPenaltyCount::<Test>::get(account(n_peers-1)) >= max_account_penalty_count);
   });
 }
 
 // #[test]
-// fn test_propose_model_peer_dishonest_proposer_model_error() {
+// fn test_propose_subnet_node_dishonest_proposer_model_error() {
 //   new_test_ext().execute_with(|| {
 //     assert_err!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
 //         1,
 //         peer(1),
 //         "test_data".into()
 //       ),
-//       Error::<Test>::ModelNotExist
+//       Error::<Test>::SubnetNotExist
 //     );
 //   });
 // }
 
 // #[test]
-// fn test_propose_model_peer_dishonest_proposer_model_peer_exists_error() {
+// fn test_propose_subnet_node_dishonest_proposer_subnet_node_exists_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
 //     let n_peers: u32 = 2;
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -3920,47 +3920,47 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_err!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(n_peers + 1)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(n_peers + 1),
 //         "test_data".into()
 //       ),
-//       Error::<Test>::ModelPeerNotExist
+//       Error::<Test>::SubnetNodeNotExist
 //     );
 
 //   });
 // }
 
 // #[test]
-// fn test_propose_model_peer_dishonest_proposer_not_submittable() {
+// fn test_propose_subnet_node_dishonest_proposer_not_submittable() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -3968,66 +3968,66 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     assert_err!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       ),
-//       Error::<Test>::PeerConsensusSubmitEpochNotReached
+//       Error::<Test>::NodeConsensusSubmitEpochNotReached
 //     );
 
 //   });
 // }
 
 // #[test]
-// fn test_propose_model_peer_dishonest_votee_peer_id_exists() {
+// fn test_propose_subnet_node_dishonest_votee_peer_id_exists() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::min_model_peers();
+//     let n_peers: u32 = Network::min_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_err!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(n_peers + 1),
 //         "test_data".into()
 //       ),
@@ -4038,65 +4038,65 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 // }
 
 // #[test]
-// fn test_propose_model_peer_dishonest_min_model_peers_error() {
+// fn test_propose_subnet_node_dishonest_min_subnet_nodes_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::min_model_peers() - 1;
+//     let n_peers: u32 = Network::min_subnet_nodes() - 1;
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_err!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       ),
-//       Error::<Test>::ModelPeersMin
+//       Error::<Test>::SubnetNodesMin
 //     );
 
 //   });
 // }
 
 // #[test]
-// fn test_propose_model_peer_dishonest() {
+// fn test_propose_subnet_node_dishonest() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4104,65 +4104,65 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, 1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, 1, subnet_id.clone());
 //   });
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_model_exists_error() {
+// fn test_vote_subnet_node_dishonest_model_exists_error() {
 //   new_test_ext().execute_with(|| {
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
 //         1,
 //         peer(1)
 //       ),
-//       Error::<Test>::ModelNotExist
+//       Error::<Test>::SubnetNotExist
 //     );
 //   });
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_model_peer_exists_error() {
+// fn test_vote_subnet_node_dishonest_subnet_node_exists_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers() - 1;
+//     let n_peers: u32 = Network::max_subnet_nodes() - 1;
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4170,57 +4170,57 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(n_peers + 1)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       ),
-//       Error::<Test>::ModelPeerNotExist
+//       Error::<Test>::SubnetNodeNotExist
 //     );
 
 //   });
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_proposer_not_submittable() {
+// fn test_vote_subnet_node_dishonest_proposer_not_submittable() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let max_model_peers: u32 = Network::max_model_peers();
+//     let max_subnet_nodes: u32 = Network::max_subnet_nodes();
 
-//     let n_peers: u32 = max_model_peers - 1;
+//     let n_peers: u32 = max_subnet_nodes - 1;
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4228,33 +4228,33 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     let _ = Balances::deposit_creating(&account(max_model_peers), deposit_amount);
+//     let _ = Balances::deposit_creating(&account(max_subnet_nodes), deposit_amount);
 
 //     assert_ok!(
-//       Network::add_model_peer(
-//         RuntimeOrigin::signed(account(max_model_peers)),
-//         model_id.clone(),
-//         peer(max_model_peers),
+//       Network::add_subnet_node(
+//         RuntimeOrigin::signed(account(max_subnet_nodes)),
+//         subnet_id.clone(),
+//         peer(max_subnet_nodes),
 //         "172.20.54.234".into(),
 //         8888,
 //         amount,
@@ -4262,35 +4262,35 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 //     );
 
 //     assert_err!(
-//       Network::propose_model_peer_dishonest(
-//         RuntimeOrigin::signed(account(max_model_peers)),
-//         model_id.clone(),
+//       Network::propose_subnet_node_dishonest(
+//         RuntimeOrigin::signed(account(max_subnet_nodes)),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       ),
-//       Error::<Test>::PeerConsensusSubmitEpochNotReached
+//       Error::<Test>::NodeConsensusSubmitEpochNotReached
 //     );
 
 //   });
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_min_model_peers_error() {
+// fn test_vote_subnet_node_dishonest_min_subnet_nodes_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::min_model_peers();
+//     let n_peers: u32 = Network::min_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4298,58 +4298,58 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     make_model_peer_removable();
+//     make_subnet_node_removable();
 //     assert_ok!(
-//       Network::remove_model_peer(
+//       Network::remove_subnet_node(
 //         RuntimeOrigin::signed(account(n_peers-1)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //       ) 
 //     );
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(2)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       ),
-//       Error::<Test>::ModelPeersMin
+//       Error::<Test>::SubnetNodesMin
 //     );
 //   });
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_peer_id_exists_error() {
+// fn test_vote_subnet_node_dishonest_peer_id_exists_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::min_model_peers();
+//     let n_peers: u32 = Network::min_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4357,36 +4357,36 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, 1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, 1, subnet_id.clone());
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(1)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(n_peers + 1)
 //       ),
 //       Error::<Test>::PeerIdNotExist
@@ -4396,18 +4396,18 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_not_proposed_error() {
+// fn test_vote_subnet_node_dishonest_not_proposed_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::min_model_peers();
+//     let n_peers: u32 = Network::min_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4415,25 +4415,25 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       ),
 //       Error::<Test>::DishonestyVoteNotProposed
@@ -4443,18 +4443,18 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_period_over_error() {
+// fn test_vote_subnet_node_dishonest_period_over_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4462,38 +4462,38 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, 1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, 1, subnet_id.clone());
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       ),
 //       Error::<Test>::DishonestyVotingPeriodOver
@@ -4503,18 +4503,18 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_duplicate_error() {
+// fn test_vote_subnet_node_dishonest_duplicate_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4522,44 +4522,44 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, 1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, 1, subnet_id.clone());
 
 //     assert_ok!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(2)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       )
 //     );
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(2)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       ),
 //       Error::<Test>::DishonestyVotingDuplicate
@@ -4569,18 +4569,18 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 
 // #[test]
-// fn test_vote_model_peer_dishonest_period_passed_error() {
+// fn test_vote_subnet_node_dishonest_period_passed_error() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4588,38 +4588,38 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, 1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, 1, subnet_id.clone());
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
 //     assert_err!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(2)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       ),
 //       Error::<Test>::DishonestyVotingPeriodOver
@@ -4628,18 +4628,18 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest() {
+// fn test_vote_subnet_node_dishonest() {
 //   new_test_ext().execute_with(|| {
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
     
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4647,36 +4647,36 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, 1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, 1, subnet_id.clone());
 
 //     assert_ok!(
-//       Network::vote_model_peer_dishonest(
+//       Network::vote_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(2)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(1)
 //       )
 //     );
@@ -4684,22 +4684,22 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 // }
 
 // #[test]
-// fn test_vote_model_peer_dishonest_consensus() {
+// fn test_vote_subnet_node_dishonest_consensus() {
 //   new_test_ext().execute_with(|| {
 
-//     let peer_removal_threshold = PeerRemovalThreshold::<Test>::get();
+//     let peer_removal_threshold = NodeRemovalThreshold::<Test>::get();
 
-//     let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+//     let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-//     build_model(model_path.clone());
+//     build_subnet(subnet_path.clone());
 
-//     let n_peers: u32 = Network::max_model_peers();
+//     let n_peers: u32 = Network::max_subnet_nodes();
 //     let n_required_voting_peers: u32 = (n_peers as f64 * (peer_removal_threshold as f64 / 10000.0)).ceil() as u32 + 1;
 
 //     // increase blocks
 //     make_model_submittable();
 
-//     let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+//     let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
 //     let deposit_amount: u128 = 1000000000000000000000000;
 //     let amount: u128 = 1000000000000000000000;
@@ -4707,60 +4707,60 @@ fn test_form_consensus_remove_ineligible_model_peer() {
 
 //     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-//     let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+//     let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
 //     assert_eq!(Network::total_stake(), amount_staked);
-//     post_successful_add_model_peers_asserts(
+//     post_successful_add_subnet_nodes_asserts(
 //       n_peers.into(),
 //       amount,
-//       model_id.clone(),
+//       subnet_id.clone(),
 //     );
 
 //     let dishonesty_voting_period = VotingPeriod::<Test>::get();
 
 //     System::set_block_number(System::block_number() + dishonesty_voting_period);
 
-//     make_model_peer_dishonesty_consensus_proposable();
+//     make_subnet_node_dishonesty_consensus_proposable();
 
 //     assert_ok!(
-//       Network::propose_model_peer_dishonest(
+//       Network::propose_subnet_node_dishonest(
 //         RuntimeOrigin::signed(account(0)),
-//         model_id.clone(),
+//         subnet_id.clone(),
 //         peer(n_peers-1),
 //         "test_data".into()
 //       )
 //     );
 
-//     post_successful_dishonesty_proposal_ensures(0, n_peers-1, model_id.clone());
+//     post_successful_dishonesty_proposal_ensures(0, n_peers-1, subnet_id.clone());
 
 //     for n in 1..n_required_voting_peers {
 //       assert_ok!(
-//         Network::vote_model_peer_dishonest(
+//         Network::vote_subnet_node_dishonest(
 //           RuntimeOrigin::signed(account(n)),
-//           model_id.clone(),
+//           subnet_id.clone(),
 //           peer(n_peers-1)
 //         )
 //       );
 //     }
 
-//     post_remove_model_peer_ensures(n_peers-1, model_id.clone());  
+//     post_remove_subnet_node_ensures(n_peers-1, subnet_id.clone());  
 //   });
 // }
 
 #[test]
 fn test_add_to_delegate_stake() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
       amount,
@@ -4775,17 +4775,17 @@ fn test_add_to_delegate_stake() {
     assert_ok!(
       Network::add_to_delegate_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ) 
     );
 
-    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    let delegate_shares = AccountSubnetDelegateStakeShares::<Test>::get(account(0), subnet_id.clone());
     assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
     assert_ne!(delegate_shares, 0);
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_balance = Network::convert_to_balance(
       delegate_shares,
@@ -4802,17 +4802,17 @@ fn test_add_to_delegate_stake() {
 #[test]
 fn test_add_to_delegate_stake_increase_pool_check_balance() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
       amount,
@@ -4827,17 +4827,17 @@ fn test_add_to_delegate_stake_increase_pool_check_balance() {
     assert_ok!(
       Network::add_to_delegate_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ) 
     );
 
-    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    let delegate_shares = AccountSubnetDelegateStakeShares::<Test>::get(account(0), subnet_id.clone());
     assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
     assert_ne!(delegate_shares, 0);
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_balance = Network::convert_to_balance(
       delegate_shares,
@@ -4850,13 +4850,13 @@ fn test_add_to_delegate_stake_increase_pool_check_balance() {
 
     let increase_delegated_stake_amount: u128 = 1000000000000000000000;
     Network::increase_delegated_stake(
-      model_id.clone(),
+      subnet_id.clone(),
       increase_delegated_stake_amount,
     );
 
     // ensure balance has increase
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
     let mut post_delegate_balance = Network::convert_to_balance(
       delegate_shares,
       total_model_delegated_stake_shares,
@@ -4870,17 +4870,17 @@ fn test_add_to_delegate_stake_increase_pool_check_balance() {
 #[test]
 fn test_remove_to_delegate_stake() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
       amount,
@@ -4895,17 +4895,17 @@ fn test_remove_to_delegate_stake() {
     assert_ok!(
       Network::add_to_delegate_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ) 
     );
 
-    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    let delegate_shares = AccountSubnetDelegateStakeShares::<Test>::get(account(0), subnet_id.clone());
     assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
     assert_ne!(delegate_shares, 0);
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_balance = Network::convert_to_balance(
       delegate_shares,
@@ -4926,7 +4926,7 @@ fn test_remove_to_delegate_stake() {
     assert_ok!(
       Network::remove_delegate_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         delegate_shares,
       )
     );
@@ -4940,17 +4940,17 @@ fn test_remove_to_delegate_stake() {
 #[test]
 fn test_remove_to_delegate_stake_epochs_not_met_err() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
-    build_model(model_path.clone());
+    build_subnet(subnet_path.clone());
     let deposit_amount: u128 = 10000000000000000000000;
     let amount: u128 = 1000000000000000000000;
     let _ = Balances::deposit_creating(&account(0), deposit_amount);
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_stake_to_be_added_as_shares = Network::convert_to_shares(
       amount,
@@ -4965,17 +4965,17 @@ fn test_remove_to_delegate_stake_epochs_not_met_err() {
     assert_ok!(
       Network::add_to_delegate_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         amount,
       ) 
     );
 
-    let delegate_shares = AccountModelDelegateStakeShares::<Test>::get(account(0), model_id.clone());
+    let delegate_shares = AccountSubnetDelegateStakeShares::<Test>::get(account(0), subnet_id.clone());
     assert_eq!(delegate_shares, delegate_stake_to_be_added_as_shares);
     assert_ne!(delegate_shares, 0);
 
-    let total_model_delegated_stake_shares = TotalModelDelegateStakeShares::<Test>::get(model_id.clone());
-    let total_model_delegated_stake_balance = TotalModelDelegateStakeBalance::<Test>::get(model_id.clone());
+    let total_model_delegated_stake_shares = TotalSubnetDelegateStakeShares::<Test>::get(subnet_id.clone());
+    let total_model_delegated_stake_balance = TotalSubnetDelegateStakeBalance::<Test>::get(subnet_id.clone());
 
     let mut delegate_balance = Network::convert_to_balance(
       delegate_shares,
@@ -4989,7 +4989,7 @@ fn test_remove_to_delegate_stake_epochs_not_met_err() {
     assert_err!(
       Network::remove_delegate_stake(
         RuntimeOrigin::signed(account(0)),
-        model_id.clone(),
+        subnet_id.clone(),
         delegate_shares,
       ),
       Error::<Test>::RequiredDelegateUnstakeEpochsNotMet
@@ -5000,12 +5000,12 @@ fn test_remove_to_delegate_stake_epochs_not_met_err() {
 #[test]
 fn test_apr_per_subnet() {
   new_test_ext().execute_with(|| {
-    let max_model_peers = Network::max_model_peers();
+    let max_subnet_nodes = Network::max_subnet_nodes();
     let min_stake = MinStakeBalance::<Test>::get();
     let epoch_length = EpochLength::<Test>::get();
     
     let mut previous_apr = f64::MAX;
-    for n in 0..max_model_peers {
+    for n in 0..max_subnet_nodes {
       let apr = Network::get_apr(epoch_length, min_stake*(n as u128 + 1));
       log::error!("apr          {:?}", apr);
       log::error!("previous_apr {:?}", apr);
@@ -5028,7 +5028,7 @@ fn test_apr_per_subnet() {
 
 //     let mut previous_apr = f64::MAX;
 //     for n in 0..max_models {
-//       TotalModels::<Test>::set(n+1);
+//       TotalSubnets::<Test>::set(n+1);
 //       let apr = Network::get_apr(epoch_length, total_staked_balance*(n as u128 + 1));
 //       log::error!("apr          {:?}", apr);
 //       log::error!("previous_apr {:?}", apr);
@@ -5048,7 +5048,7 @@ fn test_apr_per_subnet() {
 //     let total_staked_balance: u128 = 12000000000000000000000;
 //     let mut previous_emissions = u128::MAX;
 //     for n in 0..max_models {
-//       TotalModels::<Test>::set(n+1);
+//       TotalSubnets::<Test>::set(n+1);
 //       let emissions = Network::get_epoch_emissions(epoch_length, total_staked_balance*(n as u128 + 1));
 //     }
 //   });
@@ -5057,11 +5057,11 @@ fn test_apr_per_subnet() {
 #[test]
 fn test_choose_accountants() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
-    let n_peers: u32 = Network::max_model_peers();
-    build_model(model_path.clone());
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let n_peers: u32 = Network::max_subnet_nodes();
+    build_subnet(subnet_path.clone());
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -5069,32 +5069,32 @@ fn test_choose_accountants() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
-    make_model_peer_dishonesty_consensus_proposable();
+    make_subnet_node_dishonesty_consensus_proposable();
 
     Network::check_and_choose_accountant();
 
-    let mut current_accountants = CurrentAccountant2::<Test>::get(model_id.clone());
+    let mut current_accountants = CurrentAccountant2::<Test>::get(subnet_id.clone());
     let accountant = current_accountants.first_key_value().unwrap();
-    let accountant_data_count = AccountantDataCount::<Test>::get(model_id.clone());
+    let accountant_data_count = AccountantDataCount::<Test>::get(subnet_id.clone());
 
-    let mut accountant_data_peers: Vec<AccountantDataPeerParams> = Vec::new();
+    let mut accountant_data_peers: Vec<AccountantDataNodeParams> = Vec::new();
 
     assert_err!(
       Network::submit_accountant_data(
         RuntimeOrigin::signed(accountant.0.clone()), 
-        model_id.clone(),
+        subnet_id.clone(),
         Vec::new(),
       ),
       Error::<Test>::InvalidAccountantData
     );
 
-    let mut fake_data: Vec<AccountantDataPeerParams> = Vec::new();
+    let mut fake_data: Vec<AccountantDataNodeParams> = Vec::new();
 
     for n in 0..255 {
       fake_data.push(
-        AccountantDataPeerParams {
+        AccountantDataNodeParams {
           peer_id: peer(n),
           data: BoundedVec::new()
         }
@@ -5104,7 +5104,7 @@ fn test_choose_accountants() {
     assert_err!(
       Network::submit_accountant_data(
         RuntimeOrigin::signed(accountant.0.clone()), 
-        model_id.clone(),
+        subnet_id.clone(),
         fake_data,
       ),
       Error::<Test>::InvalidAccountantData
@@ -5112,7 +5112,7 @@ fn test_choose_accountants() {
 
     for n in 0..n_peers {
       accountant_data_peers.push(
-        AccountantDataPeerParams {
+        AccountantDataNodeParams {
           peer_id: peer(n),
           data: BoundedVec::new()
         }
@@ -5122,7 +5122,7 @@ fn test_choose_accountants() {
     assert_ok!(
       Network::submit_accountant_data(
         RuntimeOrigin::signed(accountant.0.clone()), 
-        model_id.clone(),
+        subnet_id.clone(),
         accountant_data_peers.clone(),
       )  
     );
@@ -5130,7 +5130,7 @@ fn test_choose_accountants() {
     assert_err!(
       Network::submit_accountant_data(
         RuntimeOrigin::signed(accountant.0.clone()), 
-        model_id.clone(),
+        subnet_id.clone(),
         accountant_data_peers.clone(),
       ),
       Error::<Test>::NotAccountant
@@ -5142,11 +5142,11 @@ fn test_choose_accountants() {
 #[test]
 fn test_propose_dishonesty() {
   new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team/StableBeluga2".into();
-    let n_peers: u32 = Network::max_model_peers();
-    build_model(model_path.clone());
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
+    let n_peers: u32 = Network::max_subnet_nodes();
+    build_subnet(subnet_path.clone());
 
-    let model_id = ModelPaths::<Test>::get(model_path.clone()).unwrap();
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
     let deposit_amount: u128 = 1000000000000000000000000;
     let amount: u128 = 1000000000000000000000;
@@ -5154,21 +5154,21 @@ fn test_propose_dishonesty() {
 
     System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
-    let amount_staked = build_model_peers(model_id.clone(), 0, n_peers, amount + deposit_amount, amount);
+    let amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, amount + deposit_amount, amount);
 
-    make_model_peer_dishonesty_consensus_proposable();
+    make_subnet_node_dishonesty_consensus_proposable();
 
     Network::check_and_choose_accountant();
 
-    let mut current_accountants = CurrentAccountant2::<Test>::get(model_id.clone());
+    let mut current_accountants = CurrentAccountant2::<Test>::get(subnet_id.clone());
     let accountant = current_accountants.first_key_value().unwrap();
-    let accountant_data_count = AccountantDataCount::<Test>::get(model_id.clone());
+    let accountant_data_count = AccountantDataCount::<Test>::get(subnet_id.clone());
 
-    let mut accountant_data_peers: Vec<AccountantDataPeerParams> = Vec::new();
+    let mut accountant_data_peers: Vec<AccountantDataNodeParams> = Vec::new();
 
     for n in 0..n_peers {
       accountant_data_peers.push(
-        AccountantDataPeerParams {
+        AccountantDataNodeParams {
           peer_id: peer(n),
           data: BoundedVec::new()
         }
@@ -5178,7 +5178,7 @@ fn test_propose_dishonesty() {
     assert_ok!(
       Network::submit_accountant_data(
         RuntimeOrigin::signed(accountant.0.clone()), 
-        model_id.clone(),
+        subnet_id.clone(),
         accountant_data_peers.clone(),
       )  
     );
@@ -5189,12 +5189,12 @@ fn test_propose_dishonesty() {
     assert_ok!(
       Network::propose_dishonesty(
         RuntimeOrigin::signed(account(1)), 
-        model_id.clone(),
+        subnet_id.clone(),
         peer(0),
         PropsType::DishonestAccountant,
         non_empty_data,
         Some(1),
-    )
+      )
     );
   });
 }
@@ -5209,20 +5209,88 @@ fn test_propose_dishonesty() {
 
 
 
+#[test]
+fn test_validate() {
+  new_test_ext().execute_with(|| {
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
 
+    build_subnet(subnet_path.clone());
+    assert_eq!(Network::total_models(), 1);
 
+    let n_peers: u32 = Network::max_subnet_nodes();
 
+    let deposit_amount: u128 = 1000000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let mut amount_staked: u128 = 0;
 
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
 
+    System::set_block_number(System::block_number() + CONSENSUS_STEPS);
 
+    amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
 
-// #[test]
-// fn test_generate_multi_node_account() {
-//   new_test_ext().execute_with(|| {
-//     let account_id = Network::generate_multi_node_account(account(0));
-//     log::error!("generate_multi_node_account account(0): {:?}", account(0));
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
 
-//     log::error!("generate_multi_node_account account_id: {:?}", account_id);
-//     log::error!("generate_multi_node_account account_id: {:?}", account_id.unwrap());
-//   });
-// }
+    // --- Insert validator
+    SubnetRewardsValidator::<Test>::insert(subnet_id, 0, account(0));
+
+    assert_ok!(
+      Network::validate(
+        RuntimeOrigin::signed(account(0)), 
+        subnet_id.clone(),
+        subnet_node_data_vec.clone()
+      )
+    );
+
+    let submission = SubnetRewardsSubmission::<Test>::get(subnet_id.clone(), 0);
+
+    assert_eq!(submission.validator, account(0));
+    assert_eq!(submission.data.len(), subnet_node_data_vec.len());
+    assert_eq!(submission.sum, DEFAULT_SCORE * n_peers as u128);
+    assert_eq!(submission.attests.len(), 0);
+    assert_eq!(submission.complete, false);
+    assert_eq!(submission.nodes_count, 0);
+
+    assert_err!(
+      Network::validate(
+        RuntimeOrigin::signed(account(0)), 
+        subnet_id.clone(),
+        subnet_node_data_vec.clone()
+      ),
+      Error::<Test>::SubnetRewardsAlreadySubmitted
+    );
+  });
+}
+
+#[test]
+fn test_validate_invalid_validator() {
+  new_test_ext().execute_with(|| {
+    let subnet_path: Vec<u8> = "petals-team/StableBeluga2".into();
+
+    build_subnet(subnet_path.clone());
+    assert_eq!(Network::total_models(), 1);
+
+    let n_peers: u32 = Network::max_subnet_nodes();
+
+    let deposit_amount: u128 = 1000000000000000000000000;
+    let amount: u128 = 1000000000000000000000;
+    let mut amount_staked: u128 = 0;
+
+    let subnet_id = SubnetPaths::<Test>::get(subnet_path.clone()).unwrap();
+
+    System::set_block_number(System::block_number() + CONSENSUS_STEPS);
+
+    amount_staked = build_subnet_nodes(subnet_id.clone(), 0, n_peers, deposit_amount, amount);
+
+    let subnet_node_data_vec = subnet_node_data(0, n_peers);
+
+    assert_err!(
+      Network::validate(
+        RuntimeOrigin::signed(account(0)), 
+        subnet_id.clone(),
+        subnet_node_data_vec
+      ),
+      Error::<Test>::InvalidValidator
+    );
+  });
+}

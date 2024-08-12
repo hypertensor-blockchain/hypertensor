@@ -21,13 +21,13 @@ impl<T: Config> Pallet<T> {
     value: u128,
   ) -> DispatchResult {
     ensure!(
-      value < 100 && value != PeerVotePremium::<T>::get(), 
-      Error::<T>::InvalidPeerVotePremium
+      value < 100 && value != NodeVotePremium::<T>::get(), 
+      Error::<T>::InvalidNodeVotePremium
     );
 
-    PeerVotePremium::<T>::set(value);
+    NodeVotePremium::<T>::set(value);
 
-    Self::deposit_event(Event::SetPeerVotePremium(value));
+    Self::deposit_event(Event::SetNodeVotePremium(value));
 
     Ok(())
   }

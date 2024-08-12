@@ -146,8 +146,8 @@ impl Config for Test {
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
   // pallet_network::GenesisConfig::<Test> {
-  //   model_path: vec![];
-  //   model_peers: vec![];
+  //   subnet_path: vec![];
+  //   subnet_nodes: vec![];
   //   accounts: vec![];
   //   blank: Some();
   // }

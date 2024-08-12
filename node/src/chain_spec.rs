@@ -291,8 +291,8 @@ fn testnet_genesis(
 		network: {
 			let mut peer_index: u8 = 0;
 			NetworkConfig {
-			model_path: "bigscience/bloom-560m".into(),
-			model_peers: endowed_accounts.iter().cloned().map(|k| {
+			subnet_path: "bigscience/bloom-560m".into(),
+			subnet_nodes: endowed_accounts.iter().cloned().map(|k| {
 				peer_index += 1;
 				(
 					k, 
@@ -344,8 +344,8 @@ fn vitalik_genesis(
 		transaction_payment: Default::default(),
 		network: {
 			NetworkConfig {
-				model_path: "bigscience/bloom-560m".into(),
-				model_peers: vec![],
+				subnet_path: "bigscience/bloom-560m".into(),
+				subnet_nodes: vec![],
 				accounts: vec![],
 				blank: {
 					Some(root_key.clone())
