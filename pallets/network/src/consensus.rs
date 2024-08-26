@@ -8,7 +8,7 @@ impl<T: Config> Pallet<T> {
     let maximum_outlier_delta_percent: u8 = MaximumOutlierDeltaPercent::<T>::get();
     let subnet_node_consensus_submit_percent_requirement: u128 = SubnetNodeConsensusSubmitPercentRequirement::<T>::get();
     let max_model_consensus_epoch_errors: u32 = MaxSubnetConsensusEpochsErrors::<T>::get();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let min_required_model_consensus_submit_epochs = MinRequiredSubnetConsensusSubmitEpochs::<T>::get();
     let model_consensus_unconfirmed_threshold = SubnetConsensusUnconfirmedThreshold::<T>::get();
     let subnet_node_seq_consensus_sent_threshold = SubnetNodeConsecutiveConsensusSentThreshold::<T>::get();

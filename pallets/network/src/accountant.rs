@@ -71,7 +71,7 @@ impl<T: Config> Pallet<T> {
     let accountant_data_index: u32 = AccountantDataCount::<T>::get(subnet_id.clone());
 
     let block: u64 = Self::get_current_block_as_u64();
-    let epoch: u64 = block / EpochLength::<T>::get();
+    let epoch: u64 = block / T::EpochLength::get();
 
     AccountantData::<T>::insert(
       subnet_id.clone(),
@@ -89,7 +89,7 @@ impl<T: Config> Pallet<T> {
 
   pub fn check_and_choose_accountant() {
     let block: u64 = Self::get_current_block_as_u64();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
     let min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
 

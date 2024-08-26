@@ -61,7 +61,7 @@ fn make_consensus_data_submittable<T: Config>() {
   // increase blocks
 	let current_block_number = get_current_block_as_u64::<T>();
   let subnet_node_removal_percentage = RemoveSubnetNodeEpochPercentage::<T>::get();
-  let epoch_length = EpochLength::<T>::get();
+  let epoch_length = T::EpochLength::get();
 
   let block_can_remove_peer = epoch_length as u128 * subnet_node_removal_percentage / PERCENTAGE_FACTOR;
 
@@ -75,7 +75,7 @@ fn make_consensus_data_submittable<T: Config>() {
 fn make_subnet_node_consensus_data_submittable<T: Config>() {
   // increase blocks
 	let current_block_number = get_current_block_as_u64::<T>();
-  let epoch_length = EpochLength::<T>::get();
+  let epoch_length = T::EpochLength::get();
   let min_required_peer_consensus_submit_epochs: u64 = Network::<T>::min_required_peer_consensus_submit_epochs();
 	let required_block = current_block_number + epoch_length * min_required_peer_consensus_submit_epochs;
 	frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(required_block));
@@ -87,7 +87,7 @@ fn make_subnet_node_removable<T: Config>() {
   // increase blocks
   let current_block_number = get_current_block_as_u64::<T>();
   let subnet_node_removal_percentage = RemoveSubnetNodeEpochPercentage::<T>::get();
-  let epoch_length = EpochLength::<T>::get();
+  let epoch_length = T::EpochLength::get();
 
   let block_span_can_remove_peer = (epoch_length as u128 * subnet_node_removal_percentage / PERCENTAGE_FACTOR) as u64;
 
@@ -104,7 +104,7 @@ fn make_subnet_node_removable<T: Config>() {
 
 fn make_model_initialized<T: Config>() {
 	let current_block_number = get_current_block_as_u64::<T>();
-	let epoch_length = EpochLength::<T>::get();
+	let epoch_length = T::EpochLength::get();
 	let min_required_model_consensus_submit_epochs: u64 = Network::<T>::min_required_model_consensus_submit_epochs();
 	frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(current_block_number + epoch_length * min_required_model_consensus_submit_epochs));
 }
@@ -372,7 +372,7 @@ benchmarks! {
 		
 		let block = frame_system::Pallet::<T>::block_number();
 
-		let epoch_length = EpochLength::<T>::get();
+		let epoch_length = T::EpochLength::get();
     let min_required_unstake_epochs = MinRequiredUnstakeEpochs::<T>::get();
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(epoch_length * min_required_unstake_epochs));
 
@@ -401,7 +401,7 @@ benchmarks! {
 	}
 
 	submit_consensus_data {
-		let epoch_length = EpochLength::<T>::get();
+		let epoch_length = T::EpochLength::get();
 
 		// add subnet
 		let subnet_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
@@ -459,7 +459,7 @@ benchmarks! {
 	}
 
 	unconfirm_consensus_data {
-		let epoch_length = EpochLength::<T>::get();
+		let epoch_length = T::EpochLength::get();
 
 		// add subnet
 		let subnet_path: Vec<u8> = "petals-team-2/StableBeluga2".into();
@@ -507,7 +507,7 @@ benchmarks! {
 		// params from genesis
 		let total_models = Network::<T>::total_models();
 		let max_models = Network::<T>::max_models();
-		let epoch_length = EpochLength::<T>::get();
+		let epoch_length = T::EpochLength::get();
 
 		// add subnet
 		let m_models: u32 = max_models;
@@ -567,7 +567,7 @@ benchmarks! {
 			}
     }
 
-		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
+		let epoch_length = u64_to_block::<T>(T::EpochLength::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
       epoch_length + (block - (block % epoch_length))
@@ -787,7 +787,7 @@ benchmarks! {
 		StakeVaultBalance::<T>::mutate(|n: &mut u128| *n += 10000000000000000000);
 		let total_models = Network::<T>::total_models();
 		let max_models = Network::<T>::max_models();
-		let epoch_length = EpochLength::<T>::get();
+		let epoch_length = T::EpochLength::get();
 
 		// add subnets
 		let m_models: u32 = max_models;
@@ -852,7 +852,7 @@ benchmarks! {
 			);	
     }
 
-		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
+		let epoch_length = u64_to_block::<T>(T::EpochLength::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
       epoch_length + (block - (block % epoch_length))
@@ -902,7 +902,7 @@ benchmarks! {
 		let block = frame_system::Pallet::<T>::block_number();
 		frame_system::Pallet::<T>::set_block_number(block + u64_to_block::<T>(CONSENSUS_STEPS));
 		
-		let epoch_length = EpochLength::<T>::get();
+		let epoch_length = T::EpochLength::get();
 
 		// add subnet peers
 		let n_peers: u8 = (Network::<T>::max_subnet_nodes()) as u8;
@@ -1029,7 +1029,7 @@ benchmarks! {
 			);	
     }
 
-		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
+		let epoch_length = u64_to_block::<T>(T::EpochLength::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
       epoch_length + (block - (block % epoch_length))
@@ -1069,7 +1069,7 @@ benchmarks! {
 		let caller = funded_account::<T>("caller", 0);
 		whitelist_account!(caller);
 
-		let epoch_length = u64_to_block::<T>(EpochLength::<T>::get());
+		let epoch_length = u64_to_block::<T>(T::EpochLength::get());
 		let block = frame_system::Pallet::<T>::block_number();
     frame_system::Pallet::<T>::set_block_number(
       epoch_length + (block - (block % epoch_length))

@@ -264,7 +264,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::InvalidEpochLengthsInterval
     );
 
-    EpochLength::<T>::set(value);
+    // EpochLength::<T>::set(value);
 
     Self::deposit_event(Event::SetEpochLengthsInterval(value));
 

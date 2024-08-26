@@ -35,7 +35,7 @@
 //       return
 //     }
 
-//     let epoch_length: u64 = EpochLength::<T>::get();
+//     let epoch_length: u64 = T::EpochLength::get();
 //     let block: u64 = Self::get_current_block_as_u64();
 //     let min_required_peer_consensus_submit_epochs: u64 = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
 

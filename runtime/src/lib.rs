@@ -74,6 +74,8 @@ pub type BlockNumber = u32;
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
 
+pub type AccountPublic = <Signature as Verify>::Signer;
+
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
@@ -586,16 +588,20 @@ impl pallet_preimage::Config for Runtime {
 
 parameter_types! {
 	pub const InitialTxRateLimit: u64 = 0;
+	pub const EpochLength: u64 = 100;
 }
 
 impl pallet_network::Config for Runtime {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
+	type EpochLength = EpochLength;
 	type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = InitialTxRateLimit;
 	type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
 	type Year = ConstU64<{ YEAR as u64 }>;
+	type OffchainSignature = Signature;
+	type OffchainPublic = AccountPublic;
 }
 
 parameter_types! {
@@ -877,6 +883,14 @@ impl_runtime_apis! {
 			let result = Network::get_subnet_nodes_model_unconfirmed_count(model_id);
 			result
 			// result.encode()
+		}
+		fn get_consensus_data(model_id: u32, epoch: u32) -> Vec<u8> {
+			let result = Network::get_consensus_data(model_id, epoch);
+			result.encode()
+		}
+		fn get_accountant_data(model_id: u32, id: u32) -> Vec<u8> {
+			let result = Network::get_accountant_data(model_id, id);
+			result.encode()
 		}
 	}
 

@@ -25,6 +25,10 @@ pub trait NetworkCustomApi<BlockHash> {
 	fn get_subnet_nodes_submittable(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
 	#[method(name = "network_getSubnetNodesModelUnconfirmedCount")]
 	fn get_subnet_nodes_model_unconfirmed_count(&self, model_id: u32, at: Option<BlockHash>) -> RpcResult<u32>;
+	#[method(name = "network_getConsensusData")]
+	fn get_consensus_data(&self, model_id: u32, epoch: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
+	#[method(name = "network_getAccountantData")]
+	fn get_accountant_data(&self, model_id: u32, id: u32, at: Option<BlockHash>) -> RpcResult<Vec<u8>>;
 }
 
 /// A struct that implements the `NetworkCustomApi`.
@@ -84,6 +88,16 @@ where
 		let api = self.client.runtime_api();
 		let at = at.unwrap_or_else(|| self.client.info().best_hash);
 		api.get_subnet_nodes_model_unconfirmed_count(at, model_id).map_err(runtime_error_into_rpc_err)
+	}
+	fn get_consensus_data(&self, model_id: u32, epoch: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
+		let api = self.client.runtime_api();
+		let at = at.unwrap_or_else(|| self.client.info().best_hash);
+		api.get_consensus_data(at, model_id, epoch).map_err(runtime_error_into_rpc_err)
+	}
+	fn get_accountant_data(&self, model_id: u32, id: u32, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<u8>> {
+		let api = self.client.runtime_api();
+		let at = at.unwrap_or_else(|| self.client.info().best_hash);
+		api.get_accountant_data(at, model_id, id).map_err(runtime_error_into_rpc_err)
 	}
 }
 

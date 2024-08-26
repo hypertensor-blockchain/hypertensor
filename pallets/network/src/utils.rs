@@ -241,6 +241,25 @@ impl<T: Config> Pallet<T> {
     result
   }
 
+  pub fn get_min_subnet_nodes(base_node_memory: u128, memory_mb: u128) -> u32 {
+    // --- Get min nodes based on default memory settings
+    let real_min_subnet_nodes: u128 = memory_mb / base_node_memory;
+    let mut min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
+    if real_min_subnet_nodes as u32 > min_subnet_nodes {
+      min_subnet_nodes = real_min_subnet_nodes as u32;
+    }
+    min_subnet_nodes
+  }
+
+  pub fn get_target_subnet_nodes(base_node_memory: u128, min_subnet_nodes: u32) -> u32 {
+    Self::percent_mul(
+      min_subnet_nodes.into(), 
+      TargetSubnetNodesMultiplier::<T>::get()
+    ) as u32 + min_subnet_nodes
+  }
+
+
+
   // pub fn get_percentage_as_u128(x: u128, y: u128) -> u128 {
   //   // Convert to percentage u128.
   //   if x == 0 || y == 0 {
@@ -259,7 +278,7 @@ impl<T: Config> Pallet<T> {
 
   pub fn get_model_initialization_cost(block: u64) -> u128 {
     let mut subnet_nodes_included_count: u128 = 0;
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
 
     for subnet_node in SubnetNodesData::<T>::iter_values() {
@@ -393,22 +412,22 @@ impl<T: Config> Pallet<T> {
   pub fn do_remove_subnet_node(block: u64, subnet_id: u32, account_id: T::AccountId) {
     // Take and remove SubnetNodesData account_id as key
     // `take()` returns and removes data
-    if let Ok(subnet_node) = SubnetNodesData::<T>::try_get(subnet_id.clone(), account_id.clone()) {
-      let peer_id = subnet_node.clone().peer_id;
+    if let Ok(subnet_node) = SubnetNodesData::<T>::try_get(subnet_id, account_id.clone()) {
+      let peer_id = subnet_node.peer_id;
 
-      SubnetNodesData::<T>::remove(subnet_id.clone(), account_id.clone());
+      SubnetNodesData::<T>::remove(subnet_id, account_id.clone());
 
       // Remove SubnetNodeAccount peer_id as key
-      SubnetNodeAccount::<T>::remove(subnet_id.clone(), subnet_node.clone().peer_id);
+      SubnetNodeAccount::<T>::remove(subnet_id, peer_id.clone());
 
       // Update SubnetAccount to reflect removal block instead of initialized block
       // Node will be able to unstake after required epochs have passed
-      let mut model_accounts: BTreeMap<T::AccountId, u64> = SubnetAccount::<T>::get(subnet_id.clone());
+      let mut model_accounts: BTreeMap<T::AccountId, u64> = SubnetAccount::<T>::get(subnet_id);
       model_accounts.insert(account_id.clone(), block);
-      SubnetAccount::<T>::insert(subnet_id.clone(), model_accounts);
+      SubnetAccount::<T>::insert(subnet_id, model_accounts);
 
       // Update total subnet peers by substracting 1
-      TotalSubnetNodes::<T>::mutate(subnet_id.clone(), |n: &mut u32| *n -= 1);
+      TotalSubnetNodes::<T>::mutate(subnet_id, |n: &mut u32| *n -= 1);
 
       // Remove subnet_id from AccountSubnets
       let mut account_model_ids: Vec<u32> = AccountSubnets::<T>::get(account_id.clone());
@@ -416,27 +435,18 @@ impl<T: Config> Pallet<T> {
       // Insert retained subnet_id's
       AccountSubnets::<T>::insert(account_id.clone(), account_model_ids);
 
-      // Remove if accountant
-      // let mut accountants: Vec<T::AccountId> = Accountants::<T>::get(subnet_id.clone());
-      // accountants.retain(|&x| x != account_id.clone());
-      // Accountants::<T>::insert(subnet_id.clone().clone(), accountants);
+      // Remove from classifications
+      for class_id in SubnetNodeClass::iter() {
+        let mut node_sets: BTreeMap<T::AccountId, u64> = SubnetNodesClasses::<T>::get(subnet_id, class_id);
+        node_sets.retain(|k, _| *k != account_id.clone());
+        SubnetNodesClasses::<T>::insert(subnet_id, class_id, node_sets);
+      }
 
-      // ===
-      // Remove subnet peer consensus results
-      // ===
-      SubnetNodeConsensusResults::<T>::remove(subnet_id.clone(), account_id.clone());
-
-      SubnetNodeConsecutiveConsensusSent::<T>::remove(subnet_id.clone(), account_id.clone());
-      SubnetNodeConsecutiveConsensusNotSent::<T>::remove(subnet_id.clone(), account_id.clone());
-
-      NodeConsensusEpochSubmitted::<T>::remove(subnet_id.clone(), account_id.clone());
-      NodeConsensusEpochUnconfirmed::<T>::remove(subnet_id.clone(), account_id.clone());
-
-      log::info!("Removed subnet peer AccountId {:?} from subnet ID {:?}", account_id.clone(), subnet_id.clone());
+      log::info!("Removed subnet peer AccountId {:?} from subnet ID {:?}", account_id.clone(), subnet_id);
 
       Self::deposit_event(
         Event::SubnetNodeRemoved { 
-          subnet_id: subnet_id.clone(), 
+          subnet_id: subnet_id, 
           account_id: account_id.clone(), 
           peer_id: peer_id,
           block: block
@@ -462,21 +472,21 @@ impl<T: Config> Pallet<T> {
   //   };
 
   //   // Insert SubnetNodesData with account_id as key
-  //   SubnetNodesData::<T>::insert(subnet_id.clone(), account_id.clone(), subnet_node);
+  //   SubnetNodesData::<T>::insert(subnet_id, account_id.clone(), subnet_node);
 
   //   // Insert subnet peer account to keep peer_ids unique within subnets
-  //   SubnetNodeAccount::<T>::insert(subnet_id.clone(), peer_id.clone(), account_id.clone());
+  //   SubnetNodeAccount::<T>::insert(subnet_id, peer_id.clone(), account_id.clone());
 
   //   // Update to current block
   //   model_accounts.insert(account_id.clone(), block);
-  //   SubnetAccount::<T>::insert(subnet_id.clone(), model_accounts);
+  //   SubnetAccount::<T>::insert(subnet_id, model_accounts);
 
   //   // Add subnet_id to account
   //   // Account can only have a subnet peer per subnet so we don't check if it exists
-  //   AccountSubnets::<T>::append(account_id.clone(), subnet_id.clone());
+  //   AccountSubnets::<T>::append(account_id.clone(), subnet_id);
 
   //   // Increase total subnet peers
-  //   TotalSubnetNodes::<T>::mutate(subnet_id.clone(), |n: &mut u32| *n += 1);
+  //   TotalSubnetNodes::<T>::mutate(subnet_id, |n: &mut u32| *n += 1);
   // }
 
   pub fn get_account_slash_percentage(account_id: T::AccountId) -> u128 {
@@ -498,7 +508,7 @@ impl<T: Config> Pallet<T> {
     let mut total_eligible_subnet_nodes = 0;
     
     // increment total_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
-    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id) {
       let initialized: u64 = subnet_node.initialized;
       if Self::is_epoch_block_eligible(
         block, 
@@ -528,7 +538,7 @@ impl<T: Config> Pallet<T> {
     let mut total_eligible_subnet_nodes = 0;
     
     // increment total_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
-    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id) {
       let initialized: u64 = subnet_node.initialized;
       if block > Self::get_eligible_epoch_block(
         epoch_length, 
@@ -556,7 +566,7 @@ impl<T: Config> Pallet<T> {
     let mut account_ids: Vec<T::AccountId> = Vec::new();
     
     // increment total_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
-    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id) {
       let initialized: u64 = subnet_node.initialized;
       if Self::is_epoch_block_eligible(
         block, 
@@ -585,7 +595,7 @@ impl<T: Config> Pallet<T> {
     let mut total_submit_eligible_subnet_nodes = 0;
     
     // increment total_submit_eligible_subnet_nodes with subnet peers that are eligible to submit consensus data
-    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
+    for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id) {
       let initialized: u64 = subnet_node.initialized;
       if Self::is_epoch_block_eligible(
         block, 
@@ -604,10 +614,10 @@ impl<T: Config> Pallet<T> {
   //   subnet_id: u32, 
   //   account_id: u32
   // ) -> bool {
-  //   let account_subnet_node = SubnetNodesData::<T>::get(subnet_id.clone(), account_id.clone());
+  //   let account_subnet_node = SubnetNodesData::<T>::get(subnet_id, account_id.clone());
   //   let submitter_peer_initialized: u64 = account_subnet_node.initialized;
   //   let block: u64 = Self::get_current_block_as_u64();
-  //   let epoch_length: u64 = EpochLength::<T>::get();
+  //   let epoch_length: u64 = T::EpochLength::get();
   //   let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
 
   //   return Self::is_epoch_block_eligible(
@@ -620,11 +630,11 @@ impl<T: Config> Pallet<T> {
 
   /// Check if subnet ID exists and account has a subnet peer within subnet ID exists
   pub fn is_model_and_subnet_node(subnet_id: u32, account_id: T::AccountId) -> bool {
-    if !SubnetsData::<T>::contains_key(subnet_id.clone()) {
+    if !SubnetsData::<T>::contains_key(subnet_id) {
       return false
     }
 
-    if !SubnetNodesData::<T>::contains_key(subnet_id.clone(), account_id) {
+    if !SubnetNodesData::<T>::contains_key(subnet_id, account_id) {
       return false
     }
 
@@ -638,11 +648,11 @@ impl<T: Config> Pallet<T> {
     peer_id: PeerId, 
     account_id: T::AccountId
   ) -> bool {
-    if !Self::is_model_and_subnet_node(subnet_id.clone(), account_id) {
+    if !Self::is_model_and_subnet_node(subnet_id, account_id) {
       return false
     }
 
-    let subnet_node_account_exists: bool = match SubnetNodeAccount::<T>::try_get(subnet_id.clone(), peer_id) {
+    let subnet_node_account_exists: bool = match SubnetNodeAccount::<T>::try_get(subnet_id, peer_id) {
       Ok(_result) => true,
       Err(()) => false,
     };
@@ -660,6 +670,86 @@ impl<T: Config> Pallet<T> {
 
   pub fn transition_submittable_to_accountant() {
 
+  }
+
+  /// Shift up subnet nodes to new classifications
+  // This is used to know the len() of each class of subnet nodes instead of iterating through each time
+  pub fn shift_node_classes(block: u64, epoch_length: u64) {
+    for (subnet_id, _) in SubnetsData::<T>::iter() {
+      let class_ids = SubnetNodeClass::iter();
+      let last_class_id = class_ids.clone().last().unwrap();
+      log::error!("last_class_id {:?}", last_class_id);
+
+      for mut class_id in class_ids {
+        // Can't increase user class after last so skip
+        if class_id == last_class_id {
+          continue;
+        }
+
+        log::error!("current class_id {:?}", class_id);
+
+        // If there are none in the class, then skip
+        // let node_sets: BTreeMap<T::AccountId, u64> = SubnetNodesClasses::<T>::get(
+        //   subnet_id, 
+        //   class_id.clone()
+        // )
+        // .ok_or(continue)
+        // .unwrap();
+        let node_sets: BTreeMap<T::AccountId, u64> = SubnetNodesClasses::<T>::get(
+          subnet_id, 
+          class_id.clone()
+        );
+
+        // If initialized but empty, then skip
+        if node_sets.is_empty() {
+          continue;
+        }
+        
+        // --- Get next class to shift into
+        let class_index = class_id.index();
+        log::error!("class_index {:?}", last_class_id);
+
+        // --- Safe unwrap from `continue` from last
+        let next_class_id: SubnetNodeClass = SubnetNodeClass::from_repr(class_index + 1).unwrap();
+        log::error!("next_class_id {:?}", next_class_id);
+
+        // --- Copy the node sets for mutation
+        let mut node_sets_copy: BTreeMap<T::AccountId, u64> = node_sets.clone();
+        
+        // --- Get next node sets for mutation or initialize new BTreeMap
+        let mut next_node_sets: BTreeMap<T::AccountId, u64> = match SubnetNodesClasses::<T>::try_get(subnet_id, next_class_id) {
+          Ok(next_node_sets) => next_node_sets,
+          Err(_) => BTreeMap::new(),
+        };
+    
+        // --- Get epochs required to be in class from the initialization block
+        let epochs = SubnetNodeClassEpochs::<T>::get(class_id.clone());
+        log::error!("epochs {:?}", epochs);
+
+        for node_set in node_sets.iter() {
+          if let Ok(subnet_node_data) = SubnetNodesData::<T>::try_get(subnet_id, node_set.0) {
+            let initialized: u64 = subnet_node_data.initialized;
+            if Self::is_epoch_block_eligible(
+              block, 
+              epoch_length, 
+              epochs, 
+              initialized
+            ) {
+              log::error!("node_set insert");
+              // --- Insert to the next classification, will only insert if doesn't already exist
+              next_node_sets.insert(node_set.0.clone(), *node_set.1);
+            }  
+          } else {
+            log::error!("node_set node exists remove");
+            // Remove the account from classification if they don't exist anymore
+            node_sets_copy.remove(node_set.clone().0);
+          }
+        }
+        // --- Update classifications
+        SubnetNodesClasses::<T>::insert(subnet_id, class_id, node_sets_copy);
+        SubnetNodesClasses::<T>::insert(subnet_id, next_class_id, next_node_sets);
+      }
+    }
   }
 
   pub fn do_choose_validator_and_accountants(epoch: u32) {

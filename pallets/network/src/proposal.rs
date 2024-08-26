@@ -129,7 +129,7 @@ impl<T: Config> Pallet<T> {
     voters.push(proposer.clone());
 
     let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let total_accountants = Self::get_total_accountants(
       subnet_id.clone(),
       block,
@@ -274,7 +274,7 @@ impl<T: Config> Pallet<T> {
     let account_subnet_node = SubnetNodesData::<T>::get(subnet_id.clone(), account_id.clone());
     let peer_initialized: u64 = account_subnet_node.initialized;
     let block: u64 = Self::get_current_block_as_u64();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
 
     ensure!(
@@ -375,7 +375,7 @@ impl<T: Config> Pallet<T> {
     );
 
     let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
 
     let mut total_accountants = Self::get_total_accountants(
       subnet_id.clone(),
@@ -500,7 +500,7 @@ impl<T: Config> Pallet<T> {
     Ok(())
   }
 
-  pub fn account_has_active_proposal(
+  fn account_has_active_proposal(
     subnet_id: u32, 
     account_id: T::AccountId, 
     proposal_type: PropsType,

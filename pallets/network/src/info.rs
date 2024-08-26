@@ -25,7 +25,7 @@ impl<T: Config> Pallet<T> {
     }
 
     let block: u64 = Self::get_current_block_as_u64();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let min_required_epochs: u64 = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
 
     let mut subnet_nodes: Vec<SubnetNode<T::AccountId>> = Vec::new();
@@ -64,7 +64,7 @@ impl<T: Config> Pallet<T> {
     }
 
     let block: u64 = Self::get_current_block_as_u64();
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     let min_required_epochs: u64 = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
 
     let mut subnet_nodes: Vec<SubnetNode<T::AccountId>> = Vec::new();
@@ -105,5 +105,21 @@ impl<T: Config> Pallet<T> {
     let unconfirmed_count = SubnetConsensusEpochUnconfirmedCount::<T>::get(subnet_id.clone());
 
     unconfirmed_count
+  }
+
+  pub fn get_consensus_data(
+    subnet_id: u32,
+    epoch: u32
+  ) -> Option<RewardsData<T::AccountId>> {
+    let data = SubnetRewardsSubmission::<T>::get(subnet_id, epoch);
+    Some(data)
+  }
+
+  pub fn get_accountant_data(
+    subnet_id: u32,
+    id: u32
+  ) -> Option<AccountantDataParams<T::AccountId>> {
+    let data = AccountantData::<T>::get(subnet_id, id);
+    Some(data)
   }
 }

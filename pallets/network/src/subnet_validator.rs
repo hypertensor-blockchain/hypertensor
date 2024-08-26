@@ -24,9 +24,20 @@ impl<T: Config> Pallet<T> {
   pub fn do_validate(
     subnet_id: u32, 
     account_id: T::AccountId,
+    block: u64, 
+    epoch_length: u64,
     epoch: u32,
     mut data: Vec<SubnetNodeData>,
   ) -> DispatchResult {
+    log::error!("epoch -> {:?}", epoch);
+
+    // We only validate logic for submitting consensus data
+    // A validator cannot be chosen unless the model has passed the initialization period
+    // ensure!(
+    //   block >= epoch_length,
+    //   Error::<T>::InvalidBlock
+    // );
+
     // --- Ensure correct epoch 
 
     // --- Ensure current subnet validator 
@@ -59,40 +70,40 @@ impl<T: Config> Pallet<T> {
       Error::<T>::SubnetRewardsAlreadySubmitted
     );
 
-    let total_subnet_nodes: u32 = TotalSubnetNodes::<T>::get(subnet_id.clone());
+    // --- Get count of eligible nodes that can be submitted for consensus rewards
+    // This is the maximum amount of nodes that can be entered
+    let included_nodes_count = SubnetNodesClasses::<T>::get(subnet_id, SubnetNodeClass::Included).len();
+    // let accountant_nodes_count = SubnetNodesClasses::<T>::get(subnet_id, SubnetNodeClass::Accountant).len();
+
     // --- Ensure data isn't greater than current registered subnet peers
     ensure!(
-      data.len() as u32 <= total_subnet_nodes,
+      data.len() as u32 <= included_nodes_count as u32,
       Error::<T>::InvalidRewardsDataLength
     );
 
     data.dedup_by(|a, b| a.peer_id == b.peer_id);
 
+    // --- Sum of all entries scores
+    // Each score is then used against the sum(scores) for emissions
     // We don't check data accuracy here because that's the job of attesters
-    let mut rewards_sum = 0;
+    let mut scores_sum = 0;
     for d in data.iter() {
-      rewards_sum += d.score;
+      scores_sum += d.score;
     }
 
-    let min_required_epochs: u64 = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
-    let block: u64 = Self::get_current_block_as_u64();
-    let epoch_length: u64 = EpochLength::<T>::get();
-
-    // --- Get count of eligible subnet nodes
-    let eligible_accounts_count: u32 = Self::get_total_eligible_subnet_nodes_count(
-      subnet_id,
-      block,
-      epoch_length,
-      min_required_epochs
-    );
+    let submittable_nodes_count = SubnetNodesClasses::<T>::get(subnet_id, SubnetNodeClass::Submittable).len();
 
     // If data.len() is 0 then the validator is deeming the epoch as invalid
 
+    // --- Validator auto-attests the epoch
+    let mut attests: BTreeSet<T::AccountId> = BTreeSet::new();
+    attests.insert(account_id.clone());
+
     let rewards_data: RewardsData<T::AccountId> = RewardsData {
       validator: account_id,
-      nodes_count: eligible_accounts_count,
-      sum: rewards_sum,
-      attests: BTreeSet::new(),
+      nodes_count: submittable_nodes_count as u32,
+      sum: scores_sum,
+      attests: attests,
       complete: false,
       data: data
     };
@@ -111,25 +122,18 @@ impl<T: Config> Pallet<T> {
     epoch_length: u64,
     epoch: u32,
   ) -> DispatchResult {
-    let subnet_node_data = SubnetNodesData::<T>::get(subnet_id.clone(), account_id.clone());
-    let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
-
-    // --- Ensure epoch eligible for attesting / must be submitable
+    let submittable_nodes = SubnetNodesClasses::<T>::get(subnet_id, SubnetNodeClass::Submittable);
+    // --- Ensure epoch eligible for attesting - must be submittable
     ensure!(
-      Self::is_epoch_block_eligible(
-        block, 
-        epoch_length, 
-        min_required_consensus_inclusion_epochs, 
-        subnet_node_data.initialized
-      ),
+      submittable_nodes.get(&account_id) != None,
       Error::<T>::NodeConsensusSubmitEpochNotReached
     );
 
     // --- Ensure epoch submitted
-    let mut submission = match SubnetRewardsSubmission::<T>::try_get(subnet_id.clone(), epoch) {
+    let mut submission = match SubnetRewardsSubmission::<T>::try_get(subnet_id, epoch) {
       Ok(submission) => submission,
       Err(()) =>
-        return Err("Unknown SubnetRewardsSubmission.".into()),
+        return Err(Error::<T>::InvalidSubnetRewardsSubmission.into()),
     };
 
     // --- Ensure not attested already
@@ -139,7 +143,7 @@ impl<T: Config> Pallet<T> {
     );
 
     SubnetRewardsSubmission::<T>::mutate(
-      subnet_id.clone(),
+      subnet_id,
       epoch.clone(),
       |params: &mut RewardsData<T::AccountId>| {
         params.attests = submission.attests;
@@ -149,41 +153,80 @@ impl<T: Config> Pallet<T> {
     Ok(())
   }
 
-  pub fn choose_validators() {
+  /// Blockchain validators choose subnet validators for the epoch to submit consensus data for rewards
+  pub fn choose_validators(block: u64, epoch_length: u64) {
+    let min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
+    let min_required_model_consensus_submit_epochs = MinRequiredSubnetConsensusSubmitEpochs::<T>::get();
 
+    let mut small_rng = SmallRng::seed_from_u64(block);
+
+    for (subnet_id, data) in SubnetsData::<T>::iter() {
+      // Ensure subnet has passed required epochs to accept submissions and generate consensus and rewards
+      // We get the eligible start block
+      //
+      // We use this here instead of when initializing the subnet or peer in order to keep the required time
+      // universal in the case subnets or peers are added before an update to the EpochLength
+      //
+      // e.g. Can't submit consensus if the following parameters
+      //			• subnet initialized		0
+      //			• epoch_length 						20
+      //			• epochs							10
+      //			• current block 			199
+      //	eligible block is 200
+      // 	can't submit on 200, 201 based on is_in_consensus_steps()
+      //	can submit between 202-219
+      //	199 is not greater than or equal to 200, revert
+      //
+      // e.g. Can submit consensus if the following parameters
+      //			• subnet initialized		0
+      //			• epoch_length 						20
+      //			• epochs							10
+      //			• current block 			205
+      //	eligible block is 200
+      // 	can't submit on 200, 201 based on is_in_consensus_steps()
+      //	can submit between 202-219
+      //	205 is not greater than or equal to 200, allow consensus data submission
+      //
+      if block < Self::get_eligible_epoch_block(
+        epoch_length, 
+        data.initialized, 
+        min_required_model_consensus_submit_epochs
+      ) {
+        continue
+      }
+
+      Self::choose_validator(
+        &mut small_rng,
+        subnet_id,
+        min_subnet_nodes,
+        0,
+      );
+    }
   }
 
   fn choose_validator(
     small_rng: &mut SmallRng,
     subnet_id: u32,
-    block: u64,
+    min_subnet_nodes: u32,
     epoch: u32,
-    epoch_length: u64,
   ) {
-    let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
-    let min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
-
-    let account_ids: Vec<T::AccountId> = Self::get_eligible_subnet_nodes_accounts(
-      subnet_id,
-      block,
-      epoch_length,
-      min_required_peer_accountant_epochs
-    );
+    let node_sets: BTreeMap<T::AccountId, u64> = SubnetNodesClasses::<T>::get(subnet_id, SubnetNodeClass::Submittable);
 
     // --- Ensure min subnet peers that are submittable are at least the minimum required
+    // --- Consensus cannot begin until this minimum is reached
     // --- If not min subnet peers count then accountant isn't needed
-    if (account_ids.len() as u32) < min_subnet_nodes {
+    if (node_sets.len() as u32) < min_subnet_nodes {
       return
     }
+
+    let account_ids: Vec<T::AccountId> = node_sets.iter()
+    .map(|x| x.0.clone())
+    .collect();
 
     // --- Get eligible validator
     let validator: Option<T::AccountId> = Self::get_random_account(
       small_rng,
-      subnet_id,
       account_ids,
-      block,
-      epoch_length,
-      min_required_peer_accountant_epochs,
     );
     
     // --- Insert validator for next epoch
@@ -195,11 +238,7 @@ impl<T: Config> Pallet<T> {
   // Get random account within subnet
   fn get_random_account(
     small_rng: &mut SmallRng,
-    subnet_id: u32,
     account_ids: Vec<T::AccountId>,
-    block: u64,
-    epoch_length: u64,
-    min_required_peer_accountant_epochs: u64,
   ) -> Option<T::AccountId> {
     // --- Get accountant
     let accountants_len = account_ids.len();
@@ -216,62 +255,45 @@ impl<T: Config> Pallet<T> {
         
     Some(new_accountant.clone())
   }
-  
-  /// Reward the validator of the epoch based on attestations
-  fn reward_validator(
-    subnet_id: u32, 
-    epoch: u32,
-  ) {
-    if let Ok(submission) = SubnetRewardsSubmission::<T>::try_get(subnet_id.clone(), epoch) {
-      // Redundant
-      if submission.complete {
-        return
-      }
-      SubnetRewardsSubmission::<T>::mutate(
-        subnet_id.clone(),
-        epoch.clone(),
-        |params: &mut RewardsData<T::AccountId>| {
-          params.complete = true;
-        }
-      );
-      let reward = Self::get_validator_reward(
-        submission.nodes_count,
-        submission.attests.len() as u32
-      );
-    }
-  }
 
   /// Return the validators reward that submitted data on the previous epoch
   // The attestation percentage must be greater than the MinAttestationPercentage
   pub fn get_validator_reward(
-    nodes_count: u32,
-    attests: u32
+    attestation_percentage: u128,
   ) -> u128 {
-    let attestation_percentage: u128 = Self::percent_div(attests as u128, nodes_count as u128);
     if MinAttestationPercentage::<T>::get() > attestation_percentage {
       return 0
     }
     Self::percent_mul(BaseReward::<T>::get(), attestation_percentage)
   }
 
-  pub fn slash_validator(subnet_id: u32, validator: T::AccountId) {
+  pub fn slash_validator(subnet_id: u32, validator: T::AccountId, attestation_percentage: u128) {
     // We never ensure balance is above 0 because any validator chosen must have the target stake
     // balance at a minimum
 
     // --- Get stake balance
+    // This could be greater than the target stake balance
     let account_model_stake: u128 = AccountSubnetStake::<T>::get(validator.clone(), subnet_id);
 
     // --- Get slash amount up to max slash
+    //
     let mut slash_amount: u128 = Self::percent_mul(account_model_stake, SlashPercentage::<T>::get());
+    // --- Update slash amount up to attestation percent
+    slash_amount = Self::percent_mul(slash_amount, Self::PERCENTAGE_FACTOR - attestation_percentage);
+    // --- Update slash amount up to max slash
     let max_slash: u128 = MaxSlashAmount::<T>::get();
     if slash_amount > max_slash {
       slash_amount = max_slash
     }
     
+    // --- Decrease account stake
     Self::decrease_account_stake(
       &validator.clone(),
       subnet_id, 
       slash_amount,
     );
+
+    // --- Increase validator penalty count
+    AccountPenaltyCount::<T>::mutate(validator, |n: &mut u32| *n += 1);
   }
 }

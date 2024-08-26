@@ -184,7 +184,7 @@ impl<T: Config> Pallet<T> {
     log::error!("seconds_per_year {:?}", seconds_per_year);
 
     // --- Get blocks per epoch
-    let epoch_length: u64 = EpochLength::<T>::get();
+    let epoch_length: u64 = T::EpochLength::get();
     log::error!("epoch_length {:?}", epoch_length);
 
     if block < epoch_length {

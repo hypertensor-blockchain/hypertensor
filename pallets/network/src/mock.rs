@@ -55,6 +55,8 @@ parameter_types! {
 
 pub type Signature = MultiSignature;
 
+pub type AccountPublic = <Signature as Verify>::Signer;
+
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 // The address format for describing accounts.
@@ -126,14 +128,21 @@ impl system::Config for Test {
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+parameter_types! {
+	pub const EpochLength: u64 = 100;
+}
+
 impl Config for Test {
   type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
   type Currency = Balances;
+  type EpochLength = EpochLength;
   type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = ConstU64<0>;
   type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
 	type Year = ConstU64<{ YEAR as u64 }>;
+  type OffchainSignature = Signature;
+	type OffchainPublic = AccountPublic;
 }
 
 // pub fn new_test_ext() -> sp_io::TestExternalities {

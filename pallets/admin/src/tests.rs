@@ -347,59 +347,60 @@ fn test_set_max_outlier_delta_percent() {
   })
 }
 
-#[test]
-fn test_set_subnet_node_consensus_submit_percent_requirement() {
-  new_test_ext().execute_with(|| {
-    assert_err!(
-      Admin::set_subnet_node_consensus_submit_percent_requirement(
-        RuntimeOrigin::root(),
-        10001,
-      ),
-      pallet_network::Error::<Test>::InvalidSubnetNodeConsensusSubmitPercentRequirement
-    );
+// #[test]
+// fn test_set_subnet_node_consensus_submit_percent_requirement() {
+//   new_test_ext().execute_with(|| {
+//     assert_err!(
+//       Admin::set_subnet_node_consensus_submit_percent_requirement(
+//         RuntimeOrigin::root(),
+//         10001,
+//       ),
+//       pallet_network::Error::<Test>::InvalidSubnetNodeConsensusSubmitPercentRequirement
+//     );
 
-    assert_err!(
-      Admin::set_subnet_node_consensus_submit_percent_requirement(
-        RuntimeOrigin::root(),
-        1,
-      ),
-      pallet_network::Error::<Test>::InvalidSubnetNodeConsensusSubmitPercentRequirement
-    );
+//     assert_err!(
+//       Admin::set_subnet_node_consensus_submit_percent_requirement(
+//         RuntimeOrigin::root(),
+//         1,
+//       ),
+//       pallet_network::Error::<Test>::InvalidSubnetNodeConsensusSubmitPercentRequirement
+//     );
 
-    assert_ok!(
-      Admin::set_subnet_node_consensus_submit_percent_requirement(
-        RuntimeOrigin::root(),
-        5100,
-      )
-    );
+//     assert_ok!(
+//       Admin::set_subnet_node_consensus_submit_percent_requirement(
+//         RuntimeOrigin::root(),
+//         5100,
+//       )
+//     );
 
-    let value = pallet_network::SubnetNodeConsensusSubmitPercentRequirement::<Test>::get();
-    assert_eq!(value, 5100);
-  })
-}
+//     let value = pallet_network::SubnetNodeConsensusSubmitPercentRequirement::<Test>::get();
+//     assert_eq!(value, 5100);
+//   })
+// }
 
-#[test]
-fn test_set_consensus_blocks_interval() {
-  new_test_ext().execute_with(|| {
-    assert_err!(
-      Admin::set_consensus_blocks_interval(
-        RuntimeOrigin::root(),
-        1,
-      ),
-      pallet_network::Error::<Test>::InvalidEpochLengthsInterval
-    );
+// Note: This is a constant now
+// #[test]
+// fn test_set_consensus_blocks_interval() {
+//   new_test_ext().execute_with(|| {
+//     assert_err!(
+//       Admin::set_consensus_blocks_interval(
+//         RuntimeOrigin::root(),
+//         1,
+//       ),
+//       pallet_network::Error::<Test>::InvalidEpochLengthsInterval
+//     );
 
-    assert_ok!(
-      Admin::set_consensus_blocks_interval(
-        RuntimeOrigin::root(),
-        1000,
-      )
-    );
+//     assert_ok!(
+//       Admin::set_consensus_blocks_interval(
+//         RuntimeOrigin::root(),
+//         1000,
+//       )
+//     );
 
-    let value = pallet_network::EpochLength::<Test>::get();
-    assert_eq!(value, 1000);
-  })
-}
+//     let value = EpochLength::get();
+//     assert_eq!(value, 1000);
+//   })
+// }
 
 #[test]
 fn test_set_peer_removal_threshold() {

@@ -211,6 +211,9 @@ impl<T: Config> Pallet<T> {
 
     // -- decrease total subnet delegate stake shares
     TotalSubnetDelegateStakeShares::<T>::mutate(subnet_id.clone(), |mut n| *n -= shares);
+
+    // -- decrease total stake overall
+    // TotalDelegateStake::<T>::mutate(|mut n| *n -= amount);
   }
 
   // fn can_remove_balance_from_coldkey_account(
