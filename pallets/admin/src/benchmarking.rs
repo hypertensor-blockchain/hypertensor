@@ -50,14 +50,14 @@ benchmarks! {
 		let model_path: Vec<u8> = "petals-team-3/StableBeluga2".into();
 	}: set_vote_model_in(RawOrigin::Root, model_path.clone())
 	verify {
-    // let value = pallet_network::ModelVoteIn::get(model_path.clone());
-		// let value = pallet_network::<T>::ModelVoteIn::get(model_path.clone()).unwrap();
-		// let value = pallet_network::ModelVoteIn::get(model_path.clone());
-    // let value1 = pallet_network::ModelVoteIn::<T>::get(model_path.clone());
+    // let value = pallet_network::SubnetVoteIn::get(model_path.clone());
+		// let value = pallet_network::<T>::SubnetVoteIn::get(model_path.clone()).unwrap();
+		// let value = pallet_network::SubnetVoteIn::get(model_path.clone());
+    // let value1 = pallet_network::SubnetVoteIn::<T>::get(model_path.clone());
 		// let value = pallet_network::model_vote_in(model_path.clone());
 
     // assert_eq!(value, Some(true));
-    // let value = pallet_network::ModelVoteOut::<T>::get(model_path.clone());
+    // let value = pallet_network::SubnetVoteOut::<T>::get(model_path.clone());
     // assert_eq!(value, Some(false));
 		assert_eq!(Some(true), Some(true));
 

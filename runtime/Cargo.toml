@@ -56,6 +56,9 @@ pallet-transaction-payment-rpc-runtime-api = { version = "4.0.0-dev", default-fe
 frame-benchmarking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", optional = true , branch = "polkadot-v1.0.0" }
 frame-system-benchmarking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", optional = true , branch = "polkadot-v1.0.0" }
 
+# Randomness
+pallet-insecure-randomness-collective-flip = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+
 # Local Dependencies
 pallet-network = { version = "4.0.0-dev", default-features = false, path = "../pallets/network" }
 network-custom-rpc-runtime-api = { version = "0.0.1", path = "../pallets/network/runtime-api", default-features = false }
@@ -104,6 +107,7 @@ std = [
 	"pallet-network/std",
 	"pallet-admin/std",
 	"pallet-model-voting/std",
+	"pallet-insecure-randomness-collective-flip/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",

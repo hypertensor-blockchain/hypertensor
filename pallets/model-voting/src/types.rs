@@ -1,5 +1,7 @@
 /// A proposal index.
 pub type PropIndex = u32;
+// pub type Model = Vec<u8>;
+// pub type Model = u32;
 
 // #[derive(
 // 	Encode,

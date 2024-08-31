@@ -18,6 +18,7 @@ use crate as pallet_network;
 use frame_support::{
   parameter_types,
   traits::Everything,
+  PalletId
 };
 use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256, U256};
@@ -37,12 +38,15 @@ frame_support::construct_runtime!(
 	pub enum Test
 	{
     System: system,
+    InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
     Balances: pallet_balances,
     Network: pallet_network,
 	}
 );
 
 pub type BalanceCall = pallet_balances::Call<Test>;
+
+pub const MILLISECS_PER_BLOCK: u64 = 6000;
 
 parameter_types! {
   pub const BlockHashCount: u64 = 250;
@@ -52,6 +56,8 @@ parameter_types! {
 // pub type AccountId = U256;
 
 pub type Signature = MultiSignature;
+
+pub type AccountPublic = <Signature as Verify>::Signer;
 
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
@@ -65,7 +71,22 @@ pub type Balance = u128;
 #[allow(dead_code)]
 pub type BlockNumber = u64;
 
+// NOTE: Currently it is not possible to change the slot duration after the chain has started.
+//       Attempting to do so will brick block production.
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
+// Time is measured by number of blocks.
+pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+pub const HOURS: BlockNumber = MINUTES * 60;
+pub const DAYS: BlockNumber = HOURS * 24;
+
+pub const YEAR: BlockNumber = DAYS * 365;
+
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
+
 pub const EXISTENTIAL_DEPOSIT: u128 = 500;
+
+impl pallet_insecure_randomness_collective_flip::Config for Test {}
 
 impl pallet_balances::Config for Test {
   type Balance = Balance;
@@ -111,12 +132,26 @@ impl system::Config for Test {
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+parameter_types! {
+	pub const EpochLength: u64 = 100;
+  pub const NetworkPalletId: PalletId = PalletId(*b"/network");
+  pub const SubnetInitializationCost: u128 = 100_000_000_000_000_000_000;
+}
+
 impl Config for Test {
   type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
   type Currency = Balances;
+  type EpochLength = EpochLength;
   type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = ConstU64<0>;
+  type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
+  type OffchainSignature = Signature;
+	type OffchainPublic = AccountPublic;
+  type Randomness = InsecureRandomnessCollectiveFlip;
+	type PalletId = NetworkPalletId;
+  type SubnetInitializationCost = SubnetInitializationCost;
 }
 
 // pub fn new_test_ext() -> sp_io::TestExternalities {
@@ -129,8 +164,8 @@ impl Config for Test {
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
   // pallet_network::GenesisConfig::<Test> {
-  //   model_path: vec![];
-  //   model_peers: vec![];
+  //   subnet_path: vec![];
+  //   subnet_nodes: vec![];
   //   accounts: vec![];
   //   blank: Some();
   // }

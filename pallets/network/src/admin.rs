@@ -18,29 +18,29 @@ use frame_support::dispatch::Vec;
 
 impl<T: Config> Pallet<T> {
   pub fn set_vote_model_in(path: Vec<u8>) -> DispatchResult {
-    // ensure model doesn't exists by path
+    // ensure subnet doesn't exists by path
     ensure!(
-      !ModelPaths::<T>::contains_key(path.clone()),
-      Error::<T>::ModelNotExist
+      !SubnetPaths::<T>::contains_key(path.clone()),
+      Error::<T>::SubnetNotExist
     );
     
-		ModelActivated::<T>::insert(path.clone(), true);
+		// SubnetActivated::<T>::insert(path.clone(), true);
 
-    Self::deposit_event(Event::SetVoteModelIn(path));
+    Self::deposit_event(Event::SetVoteSubnetIn(path));
 
     Ok(())
   }
 
   pub fn set_vote_model_out(path: Vec<u8>) -> DispatchResult {
-    // ensure model exists by path
+    // ensure subnet exists by path
     ensure!(
-      ModelPaths::<T>::contains_key(path.clone()),
-      Error::<T>::ModelNotExist
+      SubnetPaths::<T>::contains_key(path.clone()),
+      Error::<T>::SubnetNotExist
     );
 
-		ModelActivated::<T>::insert(path.clone(), false);
+		// SubnetActivated::<T>::insert(path.clone(), false);
 
-    Self::deposit_event(Event::SetVoteModelOut(path));
+    Self::deposit_event(Event::SetVoteSubnetOut(path));
 
     Ok(())
   }
@@ -48,51 +48,51 @@ impl<T: Config> Pallet<T> {
   pub fn set_max_models(value: u32) -> DispatchResult {
     ensure!(
       value <= 100,
-      Error::<T>::InvalidMaxModels
+      Error::<T>::InvalidMaxSubnets
     );
 
-    MaxModels::<T>::set(value);
+    MaxSubnets::<T>::set(value);
 
-    Self::deposit_event(Event::SetMaxModels(value));
+    Self::deposit_event(Event::SetMaxSubnets(value));
 
     Ok(())
   }
 
-  pub fn set_min_model_peers(value: u32) -> DispatchResult {
-    let max_model_peers = MaxModelPeers::<T>::get();
+  pub fn set_min_subnet_nodes(value: u32) -> DispatchResult {
+    let max_subnet_nodes = MaxSubnetNodes::<T>::get();
 
-    let peer_removal_threshold = PeerRemovalThreshold::<T>::get();
+    let peer_removal_threshold = NodeRemovalThreshold::<T>::get();
     let min_value = Self::percent_div_round_up(1 as u128, Self::PERCENTAGE_FACTOR - peer_removal_threshold);
 
     // Ensure over 10
-    // Ensure less than MaxModelPeers
-    // Ensure divisible by PeerRemovalThreshold
+    // Ensure less than MaxSubnetNodes
+    // Ensure divisible by NodeRemovalThreshold
     //  • e.g. if the threshold is .8, we need a minimum of
     ensure!(
-      value >= 9 && value <= max_model_peers && value >= min_value as u32,
-      Error::<T>::InvalidMinModelPeers
+      value >= 9 && value <= max_subnet_nodes && value >= min_value as u32,
+      Error::<T>::InvalidMinSubnetNodes
     );
 
-    MinModelPeers::<T>::set(value);
+    MinSubnetNodes::<T>::set(value);
 
-    Self::deposit_event(Event::SetMinModelPeers(value));
+    Self::deposit_event(Event::SetMinSubnetNodes(value));
 
     Ok(())
   }
 
-  pub fn set_max_model_peers(value: u32) -> DispatchResult {
+  pub fn set_max_subnet_nodes(value: u32) -> DispatchResult {
     // Ensure divisible by .01%
     // Ensuring less than or equal to PERCENTAGE_FACTOR is redundant but keep
     // for possible updates in future versions
     // * Remove `value <= Self::PERCENTAGE_FACTOR` if never used in mainnet
     ensure!(
       value <= 1000 && value as u128 <= Self::PERCENTAGE_FACTOR,
-      Error::<T>::InvalidMaxModelPeers
+      Error::<T>::InvalidMaxSubnetNodes
     );
 
-    MaxModelPeers::<T>::set(value);
+    MaxSubnetNodes::<T>::set(value);
 
-    Self::deposit_event(Event::SetMaxModelPeers(value));
+    Self::deposit_event(Event::SetMaxSubnetNodes(value));
 
     Ok(())
   }
@@ -124,57 +124,57 @@ impl<T: Config> Pallet<T> {
       Error::<T>::InvalidMaxZeroConsensusEpochs
     );
 
-    MaxModelConsensusEpochsErrors::<T>::set(value);
+    MaxSubnetConsensusEpochsErrors::<T>::set(value);
 
     Self::deposit_event(Event::SetMaxZeroConsensusEpochs(value));
 
     Ok(())
   }
 
-  // Set the time required for a model to be in storage before consensus can be formed
-  // This allows time for peers to become model peers to the model doesn't increment `no-consensus'`
+  // Set the time required for a subnet to be in storage before consensus can be formed
+  // This allows time for peers to become subnet peers to the subnet doesn't increment `no-consensus'`
   pub fn set_min_required_model_consensus_submit_epochs(value: u64) -> DispatchResult {
     // Must be greater than 2 epochs to ensure at least 1 epoch passes
     ensure!(
       value > 2,
-      Error::<T>::InvalidModelConsensusSubmitEpochs
+      Error::<T>::InvalidSubnetConsensusSubmitEpochs
     );
 
-    let min_required_peer_consensus_submit_epochs = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
+    let min_required_peer_consensus_submit_epochs = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
 
     // Must be greater than required submit epochs
-    // Peers must have time to become a model peer before submitting consensus
+    // Nodes must have time to become a subnet peer before submitting consensus
     ensure!(
       value > min_required_peer_consensus_submit_epochs,
-      Error::<T>::InvalidModelConsensusSubmitEpochs
+      Error::<T>::InvalidSubnetConsensusSubmitEpochs
     );
 
-    MinRequiredModelConsensusSubmitEpochs::<T>::set(value);
+    MinRequiredSubnetConsensusSubmitEpochs::<T>::set(value);
 
-    Self::deposit_event(Event::SetMinRequiredModelConsensusSubmitEpochs(value));
+    Self::deposit_event(Event::SetMinRequiredSubnetConsensusSubmitEpochs(value));
 
     Ok(())
   }
 
   pub fn set_min_required_peer_consensus_submit_epochs(value: u64) -> DispatchResult {
     // Must be at least 2 epochs
-    // This gives room to be greater than MinRequiredPeerConsensusInclusionEpochs
+    // This gives room to be greater than MinRequiredNodeConsensusInclusionEpochs
     ensure!(
       value > 1,
-      Error::<T>::InvalidPeerConsensusSubmitEpochs
+      Error::<T>::InvalidNodeConsensusSubmitEpochs
     );
 
-    let min_required_peer_consensus_inclusion_epochs = MinRequiredPeerConsensusInclusionEpochs::<T>::get();
+    let min_required_peer_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
 
     // Must be greater than required inclusion epochs
     ensure!(
       value > min_required_peer_consensus_inclusion_epochs,
-      Error::<T>::InvalidPeerConsensusSubmitEpochs
+      Error::<T>::InvalidNodeConsensusSubmitEpochs
     );
 
-    MinRequiredPeerConsensusSubmitEpochs::<T>::set(value);
+    MinRequiredNodeConsensusSubmitEpochs::<T>::set(value);
 
-    Self::deposit_event(Event::SetMinRequiredPeerConsensusSubmitEpochs(value));
+    Self::deposit_event(Event::SetMinRequiredNodeConsensusSubmitEpochs(value));
 
     Ok(())
   }
@@ -183,20 +183,20 @@ impl<T: Config> Pallet<T> {
     // Must be at least 1 epoch
     ensure!(
       value > 0,
-      Error::<T>::InvalidPeerConsensusInclusionEpochs
+      Error::<T>::InvalidNodeConsensusInclusionEpochs
     );
 
-    let min_required_peer_consensus_submit_epochs = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
+    let min_required_peer_consensus_submit_epochs = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
 
     // must be less than required submit epochs
     ensure!(
       value < min_required_peer_consensus_submit_epochs,
-      Error::<T>::InvalidPeerConsensusInclusionEpochs
+      Error::<T>::InvalidNodeConsensusInclusionEpochs
     );
 
-    MinRequiredPeerConsensusInclusionEpochs::<T>::set(value);
+    MinRequiredNodeConsensusInclusionEpochs::<T>::set(value);
 
-    Self::deposit_event(Event::SetMinRequiredPeerConsensusEpochs(value));
+    Self::deposit_event(Event::SetMinRequiredNodeConsensusEpochs(value));
 
     Ok(())
   }
@@ -205,20 +205,20 @@ impl<T: Config> Pallet<T> {
     // Must be at least 1 epoch
     ensure!(
       value > 1,
-      Error::<T>::InvalidPeerConsensusDishonestyEpochs
+      Error::<T>::InvalidNodeConsensusDishonestyEpochs
     );
 
-    let min_required_peer_consensus_submit_epochs = MinRequiredPeerConsensusSubmitEpochs::<T>::get();
+    let min_required_peer_consensus_submit_epochs = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
 
     // must be less than required submit epochs
     ensure!(
       value < min_required_peer_consensus_submit_epochs,
-      Error::<T>::InvalidPeerConsensusDishonestyEpochs
+      Error::<T>::InvalidNodeConsensusDishonestyEpochs
     );
 
-    MinRequiredPeerConsensusDishonestyEpochs::<T>::set(value);
+    MinRequiredNodeAccountantEpochs::<T>::set(value);
 
-    Self::deposit_event(Event::SetMinRequiredPeerConsensusDishonestyEpochs(value));
+    Self::deposit_event(Event::SetMinRequiredNodeAccountantEpochs(value));
 
     Ok(())
   }
@@ -236,23 +236,23 @@ impl<T: Config> Pallet<T> {
     Ok(())
   }
 
-  pub fn set_model_peer_consensus_submit_percent_requirement(value: u128) -> DispatchResult {
-    // Update MinModelPeers before
-    let min_model_peer_consensus_submit_count = Self::percent_mul_round_up(MinModelPeers::<T>::get() as u128, value);
+  pub fn set_subnet_node_consensus_submit_percent_requirement(value: u128) -> DispatchResult {
+    // Update MinSubnetNodes before
+    let min_subnet_node_consensus_submit_count = Self::percent_mul_round_up(MinSubnetNodes::<T>::get() as u128, value);
 
     // Must be less than 100.00% and greater than 51.00%
-    // Resulting min model peers submitting consensus requirement must be greater
+    // Resulting min subnet peers submitting consensus requirement must be greater
     // than or equal to four
     ensure!(
       value <= Self::PERCENTAGE_FACTOR && 
       value >= 5100 && 
-      min_model_peer_consensus_submit_count >= 4,
-      Error::<T>::InvalidModelPeerConsensusSubmitPercentRequirement
+      min_subnet_node_consensus_submit_count >= 4,
+      Error::<T>::InvalidSubnetNodeConsensusSubmitPercentRequirement
     );
 
-    ModelPeerConsensusSubmitPercentRequirement::<T>::set(value);
+    SubnetNodeConsensusSubmitPercentRequirement::<T>::set(value);
 
-    Self::deposit_event(Event::SetModelPeerConsensusSubmitPercentRequirement(value));
+    Self::deposit_event(Event::SetSubnetNodeConsensusSubmitPercentRequirement(value));
 
     Ok(())
   }
@@ -261,22 +261,22 @@ impl<T: Config> Pallet<T> {
     // Ensure a minimum of 1000 blocks per consensus epoch
     ensure!(
       value >= 1000,
-      Error::<T>::InvalidConsensusBlocksInterval
+      Error::<T>::InvalidEpochLengthsInterval
     );
 
-    ConsensusBlocksInterval::<T>::set(value);
+    // EpochLength::<T>::set(value);
 
-    Self::deposit_event(Event::SetConsensusBlocksInterval(value));
+    Self::deposit_event(Event::SetEpochLengthsInterval(value));
 
     Ok(())
   }
 
   pub fn set_peer_removal_threshold(value: u128) -> DispatchResult {
-    let min_model_peers: u32 = MinModelPeers::<T>::get();
-    // minimum required value is 1 / min_model_peers
-    // e.g. a minimum of 12 model peers will require a minimum value of
+    let min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
+    // minimum required value is 1 / min_subnet_nodes
+    // e.g. a minimum of 12 subnet peers will require a minimum value of
     //      8.3%
-    let min_value = Self::percent_div(1 as u128, min_model_peers as u128);
+    let min_value = Self::percent_div(1 as u128, min_subnet_nodes as u128);
 
     // Ensure between (51.00, 100.00)
     // Ensure divisible by at least one
@@ -284,12 +284,12 @@ impl<T: Config> Pallet<T> {
     // The minimum peer removal threshold is 30%
     ensure!(
       value <= Self::PERCENTAGE_FACTOR && value >= 5100 && value >= min_value,
-      Error::<T>::InvalidPeerRemovalThreshold
+      Error::<T>::InvalidNodeRemovalThreshold
     );
 
-    PeerRemovalThreshold::<T>::set(value);
+    NodeRemovalThreshold::<T>::set(value);
 
-    Self::deposit_event(Event::SetPeerRemovalThreshold(value));
+    Self::deposit_event(Event::SetNodeRemovalThreshold(value));
 
     Ok(())
   }
@@ -301,9 +301,9 @@ impl<T: Config> Pallet<T> {
       Error::<T>::InvalidPercent
     );
 
-    MaxModelRewardsWeight::<T>::set(value);
+    MaxSubnetRewardsWeight::<T>::set(value);
 
-    Self::deposit_event(Event::SetMaxModelRewardsWeight(value));
+    Self::deposit_event(Event::SetMaxSubnetRewardsWeight(value));
 
     Ok(())
   }
@@ -326,12 +326,12 @@ impl<T: Config> Pallet<T> {
     // Ensure > 0
     ensure!(
       value > 0 && value < 1000,
-      Error::<T>::InvalidModelPerPeerInitCost
+      Error::<T>::InvalidSubnetPerNodeInitCost
     );
     
-    ModelPerPeerInitCost::<T>::set(value);
+    SubnetPerNodeInitCost::<T>::set(value);
 
-    Self::deposit_event(Event::SetModelPerPeerInitCost(value));
+    Self::deposit_event(Event::SetSubnetPerNodeInitCost(value));
 
     Ok(())
   }
@@ -340,26 +340,26 @@ impl<T: Config> Pallet<T> {
     // Ensure < PERCENTAGE_FACTOR && > 51.00%
     ensure!(
       value < Self::PERCENTAGE_FACTOR && value >= 5100,
-      Error::<T>::InvalidModelConsensusUnconfirmedThreshold
+      Error::<T>::InvalidSubnetConsensusUnconfirmedThreshold
     );
     
-    ModelConsensusUnconfirmedThreshold::<T>::set(value);
+    SubnetConsensusUnconfirmedThreshold::<T>::set(value);
 
-    Self::deposit_event(Event::SetModelConsensusUnconfirmedThreshold(value));
+    Self::deposit_event(Event::SetSubnetConsensusUnconfirmedThreshold(value));
 
     Ok(())
   }
 
-  pub fn set_remove_model_peer_epoch_percentage(value: u128) -> DispatchResult {
+  pub fn set_remove_subnet_node_epoch_percentage(value: u128) -> DispatchResult {
     // Ensure < PERCENTAGE_FACTOR & > 20%
     ensure!(
       value < Self::PERCENTAGE_FACTOR && value > 2000,
-      Error::<T>::InvalidRemoveModelPeerEpochPercentage
+      Error::<T>::InvalidRemoveSubnetNodeEpochPercentage
     );
     
-    RemoveModelPeerEpochPercentage::<T>::set(value);
+    RemoveSubnetNodeEpochPercentage::<T>::set(value);
 
-    Self::deposit_event(Event::SetRemoveModelPeerEpochPercentage(value));
+    Self::deposit_event(Event::SetRemoveSubnetNodeEpochPercentage(value));
 
     Ok(())
   }

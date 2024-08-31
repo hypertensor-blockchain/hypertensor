@@ -83,4 +83,49 @@ impl<T: Config> Pallet<T> {
 
     x.saturating_mul(Self::PERCENTAGE_FACTOR).saturating_div(y).saturating_add(u128::from(x % y != 0))
   }
+
+  pub const PERCENTAGE_FACTOR_V2: u128 = 1e+18 as u128;
+  pub const HALF_PERCENT_V2: u128 = Self::PERCENTAGE_FACTOR_V2 / 2;
+  
+  /// Percentage Math
+  // Inspired by Aave PercentageMath
+
+  /// `x` is value
+  /// `y` is percentage
+  /// Rounds down to the nearest 10th decimal
+  pub fn percent_mul2(x: u128, y: u128) -> u128 {
+    if x == 0 || y == 0 {
+      return 0
+    }
+
+    if x > ((u128::MAX - Self::HALF_PERCENT_V2) / y) {
+      return 0
+    }
+
+    // x * y / 100.0
+    x.saturating_mul(y).saturating_div(Self::PERCENTAGE_FACTOR_V2)
+  }
+
+  /// `x` is value
+  /// `y` is percentage
+  /// Rounds down to the nearest 10th decimal
+  pub fn percent_div2(x: u128, y: u128) -> u128 {
+    if x == 0 || y == 0 {
+      return 0
+    }
+    
+    // x * 100.0 / y
+    x.saturating_mul(Self::PERCENTAGE_FACTOR_V2).saturating_div(y)
+  }
+
+  // Inspired by DS Math
+  // rounds to zero if x*y < WAD / 2
+  pub fn wdiv(x: u128, y: u128) -> u128 {
+    ((x * 1e+18 as u128) + (y / 2)) / y
+  }
+
+  //rounds to zero if x*y < WAD / 2
+  pub fn wmul(x: u128, y: u128) -> u128 {
+    ((x * y) + (1e+18 as u128 / 2)) / 1e+18 as u128
+  }
 }

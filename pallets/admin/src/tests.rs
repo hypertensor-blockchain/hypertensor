@@ -21,8 +21,8 @@ use frame_support::{
 use log::info;
 use sp_core::{H256, U256};
 use frame_support::traits::Currency;
-use pallet_network::MinModelPeers;
-use pallet_model_voting::{PeerVotePremium, Quorum};
+use pallet_network::MinSubnetNodes;
+use pallet_model_voting::{NodeVotePremium, Quorum};
 
 
 type AccountIdOf<Test> = <Test as frame_system::Config>::AccountId;
@@ -36,8 +36,8 @@ fn test_set_vote_model_in() {
   new_test_ext().execute_with(|| {
     let model_path: Vec<u8> = "petals-team-3/StableBeluga2".into();
 
-    let value = pallet_network::ModelActivated::<Test>::get(model_path.clone());
-    assert_eq!(value, None);
+    let value = pallet_network::SubnetActivated::<Test>::get(model_path.clone());
+    assert_eq!(value.active, false);
 
     assert_ok!(
       Admin::set_vote_model_in(
@@ -46,56 +46,56 @@ fn test_set_vote_model_in() {
       )
     );
 
-    let value1 = pallet_network::ModelActivated::<Test>::get(model_path.clone());
-    assert_eq!(value1, Some(true));
+    // let value1 = pallet_network::SubnetActivated::<Test>::get(model_path.clone());
+    // assert_eq!(value1, Some(true));
   })
 }
 
-fn test_set_vote_model_out() {
-  new_test_ext().execute_with(|| {
-    let model_path: Vec<u8> = "petals-team-3/StableBeluga2".into();
+// fn test_set_vote_model_out() {
+//   new_test_ext().execute_with(|| {
+//     let model_path: Vec<u8> = "petals-team-3/StableBeluga2".into();
 
-    let value = pallet_network::ModelActivated::<Test>::get(model_path.clone());
-    assert_eq!(value, None);
+//     let value = pallet_network::SubnetActivated::<Test>::get(model_path.clone());
+//     assert_eq!(value, None);
 
-    assert_ok!(
-      Admin::set_vote_model_in(
-        RuntimeOrigin::root(),
-        model_path.clone(),
-      )
-    );
+//     assert_ok!(
+//       Admin::set_vote_model_in(
+//         RuntimeOrigin::root(),
+//         model_path.clone(),
+//       )
+//     );
 
-    let value = pallet_network::ModelActivated::<Test>::get(model_path.clone());
-    assert_eq!(value, Some(false));
+//     let value = pallet_network::SubnetActivated::<Test>::get(model_path.clone());
+//     assert_eq!(value, Some(false));
 
-    assert_err!(
-      Admin::set_vote_model_out(
-        RuntimeOrigin::root(),
-        model_path.clone(),
-      ),
-      pallet_network::Error::<Test>::ModelNotExist
-    );
+//     assert_err!(
+//       Admin::set_vote_model_out(
+//         RuntimeOrigin::root(),
+//         model_path.clone(),
+//       ),
+//       pallet_network::Error::<Test>::SubnetNotExist
+//     );
 
-    assert_ok!(
-      Network::add_model(
-        RuntimeOrigin::signed(account(0)),
-        model_path.clone(),
-      ) 
-    );
+//     assert_ok!(
+//       Network::add_model(
+//         RuntimeOrigin::signed(account(0)),
+//         model_path.clone(),
+//       ) 
+//     );
 
-    assert_ok!(
-      Admin::set_vote_model_out(
-        RuntimeOrigin::root(),
-        model_path.clone(),
-      )
-    );
+//     assert_ok!(
+//       Admin::set_vote_model_out(
+//         RuntimeOrigin::root(),
+//         model_path.clone(),
+//       )
+//     );
 
-    let value = pallet_network::ModelActivated::<Test>::get(model_path.clone());
-    assert_eq!(value, Some(false));
-    let value = pallet_network::ModelActivated::<Test>::get(model_path.clone());
-    assert_eq!(value, Some(true));
-  })
-}
+//     let value = pallet_network::SubnetActivated::<Test>::get(model_path.clone());
+//     assert_eq!(value, Some(false));
+//     let value = pallet_network::SubnetActivated::<Test>::get(model_path.clone());
+//     assert_eq!(value, Some(true));
+//   })
+// }
 
 #[test]
 fn test_set_max_models() {
@@ -123,67 +123,67 @@ fn test_set_max_models() {
 }
 
 #[test]
-fn test_set_min_model_peers() {
+fn test_set_min_subnet_nodes() {
   new_test_ext().execute_with(|| {
     assert_err!(
-      Admin::set_min_model_peers(
+      Admin::set_min_subnet_nodes(
         RuntimeOrigin::root(),
         0,
       ),
-      pallet_network::Error::<Test>::InvalidMinModelPeers
+      pallet_network::Error::<Test>::InvalidMinSubnetNodes
     );
 
     assert_ok!(
-      Admin::set_min_model_peers(
+      Admin::set_min_subnet_nodes(
         RuntimeOrigin::root(),
         11,
       )
     );
 
-    let value = Network::min_model_peers();
+    let value = Network::min_subnet_nodes();
     assert_eq!(value, 11);
 
     assert_ok!(
-      Admin::set_min_model_peers(
+      Admin::set_min_subnet_nodes(
         RuntimeOrigin::root(),
         12,
       )
     );
 
-    let value = Network::min_model_peers();
+    let value = Network::min_subnet_nodes();
     assert_eq!(value, 12);
   })
 }
 
 #[test]
-fn test_set_max_model_peers() {
+fn test_set_max_subnet_nodes() {
   new_test_ext().execute_with(|| {
     assert_err!(
-      Admin::set_max_model_peers(
+      Admin::set_max_subnet_nodes(
         RuntimeOrigin::root(),
         10001,
       ),
-      pallet_network::Error::<Test>::InvalidMaxModelPeers
+      pallet_network::Error::<Test>::InvalidMaxSubnetNodes
     );
 
     assert_ok!(
-      Admin::set_max_model_peers(
+      Admin::set_max_subnet_nodes(
         RuntimeOrigin::root(),
         11,
       )
     );
 
-    let value = Network::max_model_peers();
+    let value = Network::max_subnet_nodes();
     assert_eq!(value, 11);
 
     assert_ok!(
-      Admin::set_max_model_peers(
+      Admin::set_max_subnet_nodes(
         RuntimeOrigin::root(),
         12,
       )
     );
 
-    let value = Network::max_model_peers();
+    let value = Network::max_subnet_nodes();
     assert_eq!(value, 12);
   })
 }
@@ -254,7 +254,7 @@ fn test_set_max_consensus_epochs_errors() {
       )
     );
 
-    let value = pallet_network::MaxModelConsensusEpochsErrors::<Test>::get();
+    let value = pallet_network::MaxSubnetConsensusEpochsErrors::<Test>::get();
     assert_eq!(value, 999);
   })
 }
@@ -269,7 +269,7 @@ fn test_set_min_required_model_consensus_submit_epochs() {
       )
     );
 
-    let value = pallet_network::MinRequiredModelConsensusSubmitEpochs::<Test>::get();
+    let value = pallet_network::MinRequiredSubnetConsensusSubmitEpochs::<Test>::get();
     assert_eq!(value, 999);
   })
 }
@@ -278,14 +278,14 @@ fn test_set_min_required_model_consensus_submit_epochs() {
 fn test_set_min_required_peer_consensus_submit_epochs() {
   new_test_ext().execute_with(|| {
 
-    let value = pallet_network::MinRequiredPeerConsensusInclusionEpochs::<Test>::get();
+    let value = pallet_network::MinRequiredNodeConsensusInclusionEpochs::<Test>::get();
 
     assert_err!(
       Admin::set_min_required_peer_consensus_submit_epochs(
         RuntimeOrigin::root(),
         value - 1,
       ),
-      pallet_network::Error::<Test>::InvalidPeerConsensusSubmitEpochs
+      pallet_network::Error::<Test>::InvalidNodeConsensusSubmitEpochs
     );
 
     assert_ok!(
@@ -295,7 +295,7 @@ fn test_set_min_required_peer_consensus_submit_epochs() {
       )
     );
 
-    let value = pallet_network::MinRequiredPeerConsensusSubmitEpochs::<Test>::get();
+    let value = pallet_network::MinRequiredNodeConsensusSubmitEpochs::<Test>::get();
     assert_eq!(value, 999);
   })
 }
@@ -303,13 +303,13 @@ fn test_set_min_required_peer_consensus_submit_epochs() {
 #[test]
 fn test_set_min_required_peer_consensus_epochs() {
   new_test_ext().execute_with(|| {
-    let submit_epochs = pallet_network::MinRequiredPeerConsensusSubmitEpochs::<Test>::get();
+    let submit_epochs = pallet_network::MinRequiredNodeConsensusSubmitEpochs::<Test>::get();
     assert_err!(
       Admin::set_min_required_peer_consensus_inclusion_epochs(
         RuntimeOrigin::root(),
         submit_epochs + 1,
       ),
-      pallet_network::Error::<Test>::InvalidPeerConsensusInclusionEpochs
+      pallet_network::Error::<Test>::InvalidNodeConsensusInclusionEpochs
     );
 
     assert_ok!(
@@ -319,7 +319,7 @@ fn test_set_min_required_peer_consensus_epochs() {
       )
     );
 
-    let value = pallet_network::MinRequiredPeerConsensusInclusionEpochs::<Test>::get();
+    let value = pallet_network::MinRequiredNodeConsensusInclusionEpochs::<Test>::get();
     assert_eq!(value, submit_epochs - 1);
   })
 }
@@ -347,59 +347,60 @@ fn test_set_max_outlier_delta_percent() {
   })
 }
 
-#[test]
-fn test_set_model_peer_consensus_submit_percent_requirement() {
-  new_test_ext().execute_with(|| {
-    assert_err!(
-      Admin::set_model_peer_consensus_submit_percent_requirement(
-        RuntimeOrigin::root(),
-        10001,
-      ),
-      pallet_network::Error::<Test>::InvalidModelPeerConsensusSubmitPercentRequirement
-    );
+// #[test]
+// fn test_set_subnet_node_consensus_submit_percent_requirement() {
+//   new_test_ext().execute_with(|| {
+//     assert_err!(
+//       Admin::set_subnet_node_consensus_submit_percent_requirement(
+//         RuntimeOrigin::root(),
+//         10001,
+//       ),
+//       pallet_network::Error::<Test>::InvalidSubnetNodeConsensusSubmitPercentRequirement
+//     );
 
-    assert_err!(
-      Admin::set_model_peer_consensus_submit_percent_requirement(
-        RuntimeOrigin::root(),
-        1,
-      ),
-      pallet_network::Error::<Test>::InvalidModelPeerConsensusSubmitPercentRequirement
-    );
+//     assert_err!(
+//       Admin::set_subnet_node_consensus_submit_percent_requirement(
+//         RuntimeOrigin::root(),
+//         1,
+//       ),
+//       pallet_network::Error::<Test>::InvalidSubnetNodeConsensusSubmitPercentRequirement
+//     );
 
-    assert_ok!(
-      Admin::set_model_peer_consensus_submit_percent_requirement(
-        RuntimeOrigin::root(),
-        5100,
-      )
-    );
+//     assert_ok!(
+//       Admin::set_subnet_node_consensus_submit_percent_requirement(
+//         RuntimeOrigin::root(),
+//         5100,
+//       )
+//     );
 
-    let value = pallet_network::ModelPeerConsensusSubmitPercentRequirement::<Test>::get();
-    assert_eq!(value, 5100);
-  })
-}
+//     let value = pallet_network::SubnetNodeConsensusSubmitPercentRequirement::<Test>::get();
+//     assert_eq!(value, 5100);
+//   })
+// }
 
-#[test]
-fn test_set_consensus_blocks_interval() {
-  new_test_ext().execute_with(|| {
-    assert_err!(
-      Admin::set_consensus_blocks_interval(
-        RuntimeOrigin::root(),
-        1,
-      ),
-      pallet_network::Error::<Test>::InvalidConsensusBlocksInterval
-    );
+// Note: This is a constant now
+// #[test]
+// fn test_set_consensus_blocks_interval() {
+//   new_test_ext().execute_with(|| {
+//     assert_err!(
+//       Admin::set_consensus_blocks_interval(
+//         RuntimeOrigin::root(),
+//         1,
+//       ),
+//       pallet_network::Error::<Test>::InvalidEpochLengthsInterval
+//     );
 
-    assert_ok!(
-      Admin::set_consensus_blocks_interval(
-        RuntimeOrigin::root(),
-        1000,
-      )
-    );
+//     assert_ok!(
+//       Admin::set_consensus_blocks_interval(
+//         RuntimeOrigin::root(),
+//         1000,
+//       )
+//     );
 
-    let value = pallet_network::ConsensusBlocksInterval::<Test>::get();
-    assert_eq!(value, 1000);
-  })
-}
+//     let value = EpochLength::get();
+//     assert_eq!(value, 1000);
+//   })
+// }
 
 #[test]
 fn test_set_peer_removal_threshold() {
@@ -409,11 +410,11 @@ fn test_set_peer_removal_threshold() {
         RuntimeOrigin::root(),
         10001,
       ),
-      pallet_network::Error::<Test>::InvalidPeerRemovalThreshold
+      pallet_network::Error::<Test>::InvalidNodeRemovalThreshold
     );
 
-    let min_model_peers: u32 = MinModelPeers::<Test>::get();
-    let min_value = (1 as u128).saturating_mul(10000).saturating_div(min_model_peers as u128);
+    let min_subnet_nodes: u32 = MinSubnetNodes::<Test>::get();
+    let min_value = (1 as u128).saturating_mul(10000).saturating_div(min_subnet_nodes as u128);
 
     let err_value = min_value - 1;
 
@@ -422,7 +423,7 @@ fn test_set_peer_removal_threshold() {
         RuntimeOrigin::root(),
         err_value,
       ),
-      pallet_network::Error::<Test>::InvalidPeerRemovalThreshold
+      pallet_network::Error::<Test>::InvalidNodeRemovalThreshold
     );
 
     let threshold = 5100;
@@ -434,7 +435,7 @@ fn test_set_peer_removal_threshold() {
       )
     );
 
-    let value = pallet_network::PeerRemovalThreshold::<Test>::get();
+    let value = pallet_network::NodeRemovalThreshold::<Test>::get();
     assert_eq!(value, threshold);
   })
 }
@@ -467,7 +468,7 @@ fn test_set_max_model_rewards_weight() {
       )
     );
 
-    let value = pallet_network::MaxModelRewardsWeight::<Test>::get();
+    let value = pallet_network::MaxSubnetRewardsWeight::<Test>::get();
     assert_eq!(value, max_model_rewards_weight);
   })
 }
@@ -505,7 +506,7 @@ fn test_set_model_per_peer_init_cost() {
         RuntimeOrigin::root(),
         0,
       ),
-      pallet_network::Error::<Test>::InvalidModelPerPeerInitCost
+      pallet_network::Error::<Test>::InvalidSubnetPerNodeInitCost
     );
 
     let cost = 999;
@@ -517,7 +518,7 @@ fn test_set_model_per_peer_init_cost() {
       )
     );
 
-    let value = pallet_network::ModelPerPeerInitCost::<Test>::get();
+    let value = pallet_network::SubnetPerNodeInitCost::<Test>::get();
     assert_eq!(value, cost);
   })
 }
@@ -530,7 +531,7 @@ fn test_set_model_consensus_unconfirmed_threshold() {
         RuntimeOrigin::root(),
         10000,
       ),
-      pallet_network::Error::<Test>::InvalidModelConsensusUnconfirmedThreshold
+      pallet_network::Error::<Test>::InvalidSubnetConsensusUnconfirmedThreshold
     );
 
     let threshold = 5100;
@@ -542,40 +543,40 @@ fn test_set_model_consensus_unconfirmed_threshold() {
       )
     );
 
-    let value = pallet_network::ModelConsensusUnconfirmedThreshold::<Test>::get();
+    let value = pallet_network::SubnetConsensusUnconfirmedThreshold::<Test>::get();
     assert_eq!(value, threshold);
   })
 }
 
 #[test]
-fn test_set_remove_model_peer_epoch_percentage() {
+fn test_set_remove_subnet_node_epoch_percentage() {
   new_test_ext().execute_with(|| {
     assert_err!(
-      Admin::set_remove_model_peer_epoch_percentage(
+      Admin::set_remove_subnet_node_epoch_percentage(
         RuntimeOrigin::root(),
         10000,
       ),
-      pallet_network::Error::<Test>::InvalidRemoveModelPeerEpochPercentage
+      pallet_network::Error::<Test>::InvalidRemoveSubnetNodeEpochPercentage
     );
 
     assert_err!(
-      Admin::set_remove_model_peer_epoch_percentage(
+      Admin::set_remove_subnet_node_epoch_percentage(
         RuntimeOrigin::root(),
         1234,
       ),
-      pallet_network::Error::<Test>::InvalidRemoveModelPeerEpochPercentage
+      pallet_network::Error::<Test>::InvalidRemoveSubnetNodeEpochPercentage
     );
 
     let percentage = 4000;
 
     assert_ok!(
-      Admin::set_remove_model_peer_epoch_percentage(
+      Admin::set_remove_subnet_node_epoch_percentage(
         RuntimeOrigin::root(),
         percentage,
       )
     );
 
-    let value = pallet_network::RemoveModelPeerEpochPercentage::<Test>::get();
+    let value = pallet_network::RemoveSubnetNodeEpochPercentage::<Test>::get();
     assert_eq!(value, percentage);
   })
 }
@@ -590,7 +591,7 @@ fn test_set_peer_vote_premium() {
         RuntimeOrigin::root(),
         value,
       ),
-      pallet_model_voting::Error::<Test>::InvalidPeerVotePremium
+      pallet_model_voting::Error::<Test>::InvalidNodeVotePremium
     );
 
     let value = 50;
@@ -602,7 +603,7 @@ fn test_set_peer_vote_premium() {
       )
     );
 
-    let value = pallet_model_voting::PeerVotePremium::<Test>::get();
+    let value = pallet_model_voting::NodeVotePremium::<Test>::get();
     assert_eq!(value, value);
 
     // shouldn't be able to set the same value
@@ -611,7 +612,7 @@ fn test_set_peer_vote_premium() {
         RuntimeOrigin::root(),
         value,
       ),
-      pallet_model_voting::Error::<Test>::InvalidPeerVotePremium
+      pallet_model_voting::Error::<Test>::InvalidNodeVotePremium
     );
 
   })

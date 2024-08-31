@@ -45,7 +45,7 @@ pub mod pallet {
   use super::*;
   use frame_support::pallet_prelude::*;
   use pallet_network::AdminInterface as NetworkAdminInterface;
-  use pallet_model_voting::AdminInterface as ModelVotingAdminInterface;
+  use pallet_model_voting::AdminInterface as SubnetVotingAdminInterface;
 
   #[pallet::config]
   pub trait Config: frame_system::Config {
@@ -54,7 +54,7 @@ pub mod pallet {
 
     type NetworkAdminInterface: NetworkAdminInterface;
 
-    type ModelVotingAdminInterface: ModelVotingAdminInterface;
+    type SubnetVotingAdminInterface: SubnetVotingAdminInterface;
 
     // type WeightInfo: WeightInfo;
   }
@@ -67,22 +67,22 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    SetVoteModelIn(Vec<u8>),
-    SetVoteModelOut(Vec<u8>),
-    SetMaxModels(u32),
-    SetMinModelPeers(u32),
-    SetMaxModelPeers(u32),
+    SetVoteSubnetIn(Vec<u8>),
+    SetVoteSubnetOut(Vec<u8>),
+    SetMaxSubnets(u32),
+    SetMinSubnetNodes(u32),
+    SetMaxSubnetNodes(u32),
     SetMinStakeBalance(u128),
     SetTxRateLimit(u64),
     SetMaxZeroConsensusEpochs(u32),
-    SetMinRequiredModelConsensusSubmitEpochs(u64),
-    SetMinRequiredPeerConsensusSubmitEpochs(u64),
-    SetMinRequiredPeerConsensusEpochs(u64),
+    SetMinRequiredSubnetConsensusSubmitEpochs(u64),
+    SetMinRequiredNodeConsensusSubmitEpochs(u64),
+    SetMinRequiredNodeConsensusEpochs(u64),
     SetMaximumOutlierDeltaPercent(u8),
-    SetModelPeerConsensusSubmitPercentRequirement(u128),
+    SetSubnetNodeConsensusSubmitPercentRequirement(u128),
     SetConsensusBlocksInterval(u64),
-    SetPeerRemovalThreshold(u8),
-    SetMaxModelRewardsWeight(u16),
+    SetNodeRemovalThreshold(u8),
+    SetMaxSubnetRewardsWeight(u16),
   }
 
   //
@@ -113,16 +113,16 @@ pub mod pallet {
 
     #[pallet::call_index(3)]
     #[pallet::weight(0)]
-    pub fn set_min_model_peers(origin: OriginFor<T>, value: u32) -> DispatchResult {
+    pub fn set_min_subnet_nodes(origin: OriginFor<T>, value: u32) -> DispatchResult {
       ensure_root(origin)?;
-      T::NetworkAdminInterface::set_min_model_peers(value)
+      T::NetworkAdminInterface::set_min_subnet_nodes(value)
     }
 
     #[pallet::call_index(4)]
     #[pallet::weight(0)]
-    pub fn set_max_model_peers(origin: OriginFor<T>, value: u32) -> DispatchResult {
+    pub fn set_max_subnet_nodes(origin: OriginFor<T>, value: u32) -> DispatchResult {
       ensure_root(origin)?;
-      T::NetworkAdminInterface::set_max_model_peers(value)
+      T::NetworkAdminInterface::set_max_subnet_nodes(value)
     }
 
     #[pallet::call_index(5)]
@@ -183,9 +183,9 @@ pub mod pallet {
 
     #[pallet::call_index(13)]
     #[pallet::weight(0)]
-    pub fn set_model_peer_consensus_submit_percent_requirement(origin: OriginFor<T>, value: u128) -> DispatchResult {
+    pub fn set_subnet_node_consensus_submit_percent_requirement(origin: OriginFor<T>, value: u128) -> DispatchResult {
       ensure_root(origin)?;
-      T::NetworkAdminInterface::set_model_peer_consensus_submit_percent_requirement(value)
+      T::NetworkAdminInterface::set_subnet_node_consensus_submit_percent_requirement(value)
     }
 
     #[pallet::call_index(14)]
@@ -232,23 +232,23 @@ pub mod pallet {
 
     #[pallet::call_index(20)]
     #[pallet::weight(0)]
-    pub fn set_remove_model_peer_epoch_percentage(origin: OriginFor<T>, value: u128) -> DispatchResult {
+    pub fn set_remove_subnet_node_epoch_percentage(origin: OriginFor<T>, value: u128) -> DispatchResult {
       ensure_root(origin)?;
-      T::NetworkAdminInterface::set_remove_model_peer_epoch_percentage(value)
+      T::NetworkAdminInterface::set_remove_subnet_node_epoch_percentage(value)
     }
 
     #[pallet::call_index(21)]
     #[pallet::weight(0)]
     pub fn set_peer_vote_premium(origin: OriginFor<T>, value: u128) -> DispatchResult {
       ensure_root(origin)?;
-      T::ModelVotingAdminInterface::set_peer_vote_premium(value)
+      T::SubnetVotingAdminInterface::set_peer_vote_premium(value)
     }
 
     #[pallet::call_index(22)]
     #[pallet::weight(0)]
     pub fn set_quorum(origin: OriginFor<T>, value: u128) -> DispatchResult {
       ensure_root(origin)?;
-      T::ModelVotingAdminInterface::set_quorum(value)
+      T::SubnetVotingAdminInterface::set_quorum(value)
     }
   }
 }

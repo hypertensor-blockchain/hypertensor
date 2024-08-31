@@ -45,6 +45,7 @@ pub use frame_support::{
 		IdentityFee, Weight
 	},
 	StorageValue,
+	PalletId,
 };
 pub use frame_system::Call as SystemCall;
 use frame_system::{EnsureRoot, EnsureSigned};
@@ -73,6 +74,8 @@ pub type BlockNumber = u32;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
+
+pub type AccountPublic = <Signature as Verify>::Signer;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
@@ -149,13 +152,15 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const YEAR: BlockNumber = DAYS * 365;
 
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
+
 // Est. halving per x years
 // pub const BLOCKS_PER_HALVING: BlockNumber = YEAR * 4 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const BLOCKS_PER_HALVING: BlockNumber = YEAR * 1;
 
-// max supply 28m 28000000000000000000000000
+// max supply 2.8m 2800000000000000000000000
 // pub const TARGET_MAX_TOTAL_SUPPLY: u64 = 28_000_000_000_000_000;
-pub const TARGET_MAX_TOTAL_SUPPLY: u128 = 28_000_000_000_000_000_000_000_000;
+pub const TARGET_MAX_TOTAL_SUPPLY: u128 = 2_800_000_000_000_000_000_000_000;
 
 // initial reward per block first halving
 // pub const INITIAL_REWARD_PER_BLOCK: u64 = (TARGET_MAX_TOTAL_SUPPLY / 2) / BLOCKS_PER_HALVING as u64;
@@ -253,7 +258,7 @@ impl pallet_multisig::Config for Runtime {
 	type WeightInfo = pallet_multisig::weights::SubstrateWeight<Runtime>;
 }
 
-// impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
 
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
@@ -321,24 +326,24 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
-// Configure the pallet network.
-parameter_types! {
-	pub const NetworkInitialBondsMovingAverage: u64 = 900_000;
-	pub const NetworkInitialMaxAllowedUids: u16 = 4096;
-	pub const NetworkInitialIssuance: u64 = 0;
-	pub const NetworkInitialEmissionValue: u16 = 0;
-	pub const NetworkInitialMaxAllowedValidators: u16 = 128;
-	pub const NetworkInitialBurn: u64 = 1_000_000_000; // 1 tao
-	pub const NetworkInitialMinBurn: u64 = 1_000_000_000; // 1 tao
-	pub const NetworkInitialMaxBurn: u64 = 100_000_000_000; // 100 tao
-	// pub const NetworkInitialTxRateLimit: u64 = 1000;
-	pub const NetworkInitialMaxRegistrationsPerBlock: u16 = 1;
-	pub const NetworkInitialMinLockCost: u64 = 1_000_000_000_000; // 1000 TAO
-	pub const NetworkInitialModelLimit: u16 = 12;
-	pub const NetworkInitialModelPeerLimit: u16 = 12;
-	pub const NetworkInitialNetworkRateLimit: u64 = 1 * 7200;
-	pub const NetworkInitialStringLimit: u32 = 1000;
-}
+// // Configure the pallet network.
+// parameter_types! {
+// 	pub const NetworkInitialBondsMovingAverage: u64 = 900_000;
+// 	pub const NetworkInitialMaxAllowedUids: u16 = 4096;
+// 	pub const NetworkInitialIssuance: u64 = 0;
+// 	pub const NetworkInitialEmissionValue: u16 = 0;
+// 	pub const NetworkInitialMaxAllowedValidators: u16 = 128;
+// 	pub const NetworkInitialBurn: u64 = 1_000_000_000; // 1 tao
+// 	pub const NetworkInitialMinBurn: u64 = 1_000_000_000; // 1 tao
+// 	pub const NetworkInitialMaxBurn: u64 = 100_000_000_000; // 100 tao
+// 	// pub const NetworkInitialTxRateLimit: u64 = 1000;
+// 	pub const NetworkInitialMaxRegistrationsPerBlock: u16 = 1;
+// 	pub const NetworkInitialMinLockCost: u64 = 1_000_000_000_000; // 1000 TAO
+// 	pub const NetworkInitialModelLimit: u16 = 12;
+// 	pub const NetworkInitialSubnetNodeLimit: u16 = 12;
+// 	pub const NetworkInitialNetworkRateLimit: u64 = 1 * 7200;
+// 	pub const NetworkInitialStringLimit: u32 = 1000;
+// }
 
 // authority
 pub struct AuraAccountAdapter;
@@ -376,7 +381,7 @@ impl pallet_rewards::Config for Runtime {
 impl pallet_admin::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NetworkAdminInterface = Network;
-	type ModelVotingAdminInterface = ModelVoting;
+	type SubnetVotingAdminInterface = SubnetVoting;
 }
 
 // scheduler
@@ -584,31 +589,48 @@ impl pallet_preimage::Config for Runtime {
 
 parameter_types! {
 	pub const InitialTxRateLimit: u64 = 0;
+	pub const EpochLength: u64 = 10;
+	pub const NetworkPalletId: PalletId = PalletId(*b"/network");
+	pub const SubnetInitializationCost: u128 = 100_000_000_000_000_000_000;
 }
 
 impl pallet_network::Config for Runtime {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
+	type EpochLength = EpochLength;
 	type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = InitialTxRateLimit;
+	type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
+	type OffchainSignature = Signature;
+	type OffchainPublic = AccountPublic;
+	type Randomness = InsecureRandomnessCollectiveFlip;
+	type PalletId = NetworkPalletId;
+	type SubnetInitializationCost = SubnetInitializationCost;
 }
 
 parameter_types! {
-	pub const VotingPeriod: BlockNumber = DAYS * 21;
-	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+	// pub const VotingPeriod: BlockNumber = DAYS * 21;
+	// pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+	pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
+
+	// Testing
+	pub const VotingPeriod: BlockNumber = 50; // ~5 minutes
+	pub const EnactmentPeriod: BlockNumber = 30; // ~3 minutes
 }
 
 impl pallet_model_voting::Config for Runtime {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ModelVote = Network;
+	type SubnetVote = Network;
 	type Currency = Balances;
-	type MaxActivateProposals = ConstU32<32>;
+	type MaxActivateProposals = ConstU32<1>;
 	type MaxDeactivateProposals = ConstU32<32>;
 	type MaxProposals = ConstU32<32>;
 	type VotingPeriod = VotingPeriod;
 	type EnactmentPeriod = EnactmentPeriod;
+	type MinProposalStake = MinProposalStake;
 }
 
 // cargo check -p node-template-runtime --release
@@ -616,7 +638,7 @@ impl pallet_model_voting::Config for Runtime {
 construct_runtime!(
 	pub struct Runtime {
 		System: frame_system,
-		// InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
+		InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
 		Timestamp: pallet_timestamp,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
@@ -632,10 +654,10 @@ construct_runtime!(
 		Preimage: pallet_preimage,
 		// Referenda: pallet_referenda,
 		// ConvictionVoting: pallet_conviction_voting,
-		// ConvictionModelVoting: pallet_model_voting_v2,
+		// ConvictionSubnetVoting: pallet_model_voting_v2,
 		Network: pallet_network,
 		Admin: pallet_admin,
-		ModelVoting: pallet_model_voting,
+		SubnetVoting: pallet_model_voting,
 	}
 );
 
@@ -683,7 +705,7 @@ mod benches {
 		[pallet_grandpa, Grandpa]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_model_voting, ModelVoting]
+		[pallet_model_voting, SubnetVoting]
 		[pallet_network, Network]
 	);
 }
@@ -857,22 +879,34 @@ impl_runtime_apis! {
 	}
 
 	impl network_custom_rpc_runtime_api::NetworkRuntimeApi<Block> for Runtime {
-		fn get_model_peers(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers(model_id);
+		fn get_subnet_nodes(model_id: u32) -> Vec<u8> {
+			let result = Network::get_subnet_nodes(model_id);
 			result.encode()
 		}
-		fn get_model_peers_included(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_included(model_id);
+		fn get_subnet_nodes_included(model_id: u32) -> Vec<u8> {
+			let result = Network::get_subnet_nodes_included(model_id);
 			result.encode()
 		}
-		fn get_model_peers_submittable(model_id: u32) -> Vec<u8> {
-			let result = Network::get_model_peers_submittable(model_id);
+		fn get_subnet_nodes_submittable(model_id: u32) -> Vec<u8> {
+			let result = Network::get_subnet_nodes_submittable(model_id);
 			result.encode()
 		}
-		fn get_model_peers_model_unconfirmed_count(model_id: u32) -> u32 {
-			let result = Network::get_model_peers_model_unconfirmed_count(model_id);
+		fn get_subnet_nodes_model_unconfirmed_count(model_id: u32) -> u32 {
+			let result = Network::get_subnet_nodes_model_unconfirmed_count(model_id);
 			result
 			// result.encode()
+		}
+		fn get_consensus_data(model_id: u32, epoch: u32) -> Vec<u8> {
+			let result = Network::get_consensus_data(model_id, epoch);
+			result.encode()
+		}
+		fn get_accountant_data(model_id: u32, id: u32) -> Vec<u8> {
+			let result = Network::get_accountant_data(model_id, id);
+			result.encode()
+		}
+		fn get_minimum_subnet_nodes(subnet_id: u32, memory_mb: u128) -> u32 {
+			let result = Network::get_minimum_subnet_nodes(subnet_id, memory_mb);
+			result
 		}
 	}
 

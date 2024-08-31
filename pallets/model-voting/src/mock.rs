@@ -18,6 +18,7 @@ use crate as pallet_model_voting;
 use frame_support::{
   parameter_types,
   traits::Everything,
+  PalletId
 };
 use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256, U256};
@@ -37,9 +38,10 @@ frame_support::construct_runtime!(
 	pub enum Test
 	{
     System: system,
+    InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
     Balances: pallet_balances,
     Network: pallet_network,
-    ModelVoting: pallet_model_voting,
+    SubnetVoting: pallet_model_voting,
 	}
 );
 
@@ -54,6 +56,8 @@ parameter_types! {
 
 pub type Signature = MultiSignature;
 
+pub type AccountPublic = <Signature as Verify>::Signer;
+
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 // The address format for describing accounts.
@@ -67,11 +71,19 @@ pub type Balance = u128;
 pub type BlockNumber = u64;
 
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
+
+// Time is measured by number of blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
+pub const YEAR: BlockNumber = DAYS * 365;
+
+pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
+
 pub const EXISTENTIAL_DEPOSIT: u128 = 500;
+
+impl pallet_insecure_randomness_collective_flip::Config for Test {}
 
 impl pallet_balances::Config for Test {
   type Balance = Balance;
@@ -117,29 +129,45 @@ impl system::Config for Test {
   type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+parameter_types! {
+	pub const EpochLength: u64 = 100;
+  pub const NetworkPalletId: PalletId = PalletId(*b"/network");
+  pub const SubnetInitializationCost: u128 = 100_000_000_000_000_000_000;
+}
+
 impl pallet_network::Config for Test {
   type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
   type Currency = Balances;
+  type EpochLength = EpochLength;
   type StringLimit = ConstU32<100>;
 	type InitialTxRateLimit = ConstU64<0>;
+  type SecsPerBlock = ConstU64<{ SECS_PER_BLOCK as u64 }>;
+	type Year = ConstU64<{ YEAR as u64 }>;
+  type OffchainSignature = Signature;
+	type OffchainPublic = AccountPublic;
+  type Randomness = InsecureRandomnessCollectiveFlip;
+	type PalletId = NetworkPalletId;
+  type SubnetInitializationCost = SubnetInitializationCost;
 }
 
 parameter_types! {
 	pub const VotingPeriod: BlockNumber = DAYS * 21;
 	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+  pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
 }
 
 impl Config for Test {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
-	type ModelVote = Network;
+	type SubnetVote = Network;
 	type Currency = Balances;
 	type MaxActivateProposals = ConstU32<32>;
 	type MaxDeactivateProposals = ConstU32<32>;
 	type MaxProposals = ConstU32<32>;
 	type VotingPeriod = VotingPeriod;
 	type EnactmentPeriod = EnactmentPeriod;
+  type MinProposalStake = MinProposalStake; // 100 * 1e18
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

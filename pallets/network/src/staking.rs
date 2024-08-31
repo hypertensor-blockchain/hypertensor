@@ -18,7 +18,7 @@ use super::*;
 impl<T: Config> Pallet<T> {
   pub fn do_add_stake(
     origin: T::RuntimeOrigin,
-    model_id: u32,
+    subnet_id: u32,
     hotkey: T::AccountId,
     stake_to_be_added: u128,
   ) -> DispatchResult {
@@ -31,7 +31,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::CouldNotConvertToBalance
     );
 
-    let account_stake_balance: u128 = AccountModelStake::<T>::get(&account_id, model_id);
+    let account_stake_balance: u128 = AccountSubnetStake::<T>::get(&account_id, subnet_id);
 
     ensure!(
       account_stake_balance.saturating_add(stake_to_be_added) >= MinStakeBalance::<T>::get(),
@@ -65,21 +65,21 @@ impl<T: Config> Pallet<T> {
   
     Self::increase_account_stake(
       &account_id,
-      model_id, 
+      subnet_id, 
       stake_to_be_added,
     );
 
     // Set last block for rate limiting
     Self::set_last_tx_block(&account_id, block);
 
-    Self::deposit_event(Event::StakeAdded(model_id, account_id, stake_to_be_added));
+    Self::deposit_event(Event::StakeAdded(subnet_id, account_id, stake_to_be_added));
 
     Ok(())
   }
 
   pub fn do_remove_stake(
     origin: T::RuntimeOrigin, 
-    model_id: u32,
+    subnet_id: u32,
     hotkey: T::AccountId,
     is_peer: bool,
     stake_to_be_removed: u128,
@@ -92,7 +92,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::NotEnoughStakeToWithdraw
     );
 
-    let account_stake_balance: u128 = AccountModelStake::<T>::get(&account_id, model_id.clone());
+    let account_stake_balance: u128 = AccountSubnetStake::<T>::get(&account_id, subnet_id.clone());
 
     // --- Ensure that the account has enough stake to withdraw.
     ensure!(
@@ -122,15 +122,15 @@ impl<T: Config> Pallet<T> {
     );
 
     // --- 7. We remove the balance from the hotkey.
-    Self::decrease_account_stake(&account_id, model_id, stake_to_be_removed);
+    Self::decrease_account_stake(&account_id, subnet_id, stake_to_be_removed);
 
-    let remaining_account_stake_balance: u128 = AccountModelStake::<T>::get(&account_id, model_id);
+    let remaining_account_stake_balance: u128 = AccountSubnetStake::<T>::get(&account_id, subnet_id);
     
-    // --- 8. If model stake balance is zero, remove from ModelAccount
+    // --- 8. If subnet stake balance is zero, remove from SubnetAccount
     if remaining_account_stake_balance == 0 {
-      let mut model_accounts = ModelAccount::<T>::get(model_id);
+      let mut model_accounts = SubnetAccount::<T>::get(subnet_id);
       model_accounts.remove(&account_id);
-      ModelAccount::<T>::insert(model_id.clone(), model_accounts);
+      SubnetAccount::<T>::insert(subnet_id.clone(), model_accounts);
     }
 
     // --- 9. We add the balancer to the account_id.  If the above fails we will not credit this account_id.
@@ -139,28 +139,28 @@ impl<T: Config> Pallet<T> {
     // Set last block for rate limiting
     Self::set_last_tx_block(&account_id, block);
 
-    Self::deposit_event(Event::StakeRemoved(model_id, account_id, stake_to_be_removed));
+    Self::deposit_event(Event::StakeRemoved(subnet_id, account_id, stake_to_be_removed));
 
     Ok(())
   }
 
   pub fn increase_account_stake(
     account_id: &T::AccountId,
-    model_id: u32, 
+    subnet_id: u32, 
     amount: u128,
   ) {
-    // -- increase account model staking balance
-    AccountModelStake::<T>::insert(
+    // -- increase account subnet staking balance
+    AccountSubnetStake::<T>::insert(
       account_id,
-      model_id.clone(),
-      AccountModelStake::<T>::get(account_id, model_id).saturating_add(amount),
+      subnet_id.clone(),
+      AccountSubnetStake::<T>::get(account_id, subnet_id).saturating_add(amount),
     );
 
     // -- increase account_id total stake
     TotalAccountStake::<T>::mutate(account_id, |mut n| *n += amount);
 
-    // -- increase total model stake
-    TotalModelStake::<T>::mutate(model_id.clone(), |mut n| *n += amount);
+    // -- increase total subnet stake
+    TotalSubnetStake::<T>::mutate(subnet_id.clone(), |mut n| *n += amount);
 
     // -- increase total stake overall
     TotalStake::<T>::mutate(|mut n| *n += amount);
@@ -168,14 +168,14 @@ impl<T: Config> Pallet<T> {
   
   pub fn decrease_account_stake(
     account_id: &T::AccountId,
-    model_id: u32, 
+    subnet_id: u32, 
     amount: u128,
   ) {
-    // -- decrease account model staking balance
-    AccountModelStake::<T>::insert(
+    // -- decrease account subnet staking balance
+    AccountSubnetStake::<T>::insert(
       account_id,
-      model_id.clone(),
-      AccountModelStake::<T>::get(account_id, model_id).saturating_sub(amount),
+      subnet_id.clone(),
+      AccountSubnetStake::<T>::get(account_id, subnet_id).saturating_sub(amount),
     );
 
     // -- decrease account_id total stake
@@ -184,8 +184,8 @@ impl<T: Config> Pallet<T> {
     // -- decrease total stake overall
     TotalStake::<T>::mutate(|mut n| *n -= amount);
 
-    // -- decrease total model stake
-    TotalModelStake::<T>::mutate(model_id.clone(), |mut n| *n -= amount);
+    // -- decrease total subnet stake
+    TotalSubnetStake::<T>::mutate(subnet_id.clone(), |mut n| *n -= amount);
   }
 
   pub fn can_remove_balance_from_coldkey_account(
@@ -228,7 +228,7 @@ impl<T: Config> Pallet<T> {
     account_id: &T::AccountId,
     amount: <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance,
   ) {
-    T::Currency::deposit_creating(&account_id, amount); // Infallibe
+    T::Currency::deposit_creating(&account_id, amount);
   }
 
   pub fn get_coldkey_balance(
