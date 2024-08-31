@@ -45,6 +45,7 @@ pub use frame_support::{
 		IdentityFee, Weight
 	},
 	StorageValue,
+	PalletId,
 };
 pub use frame_system::Call as SystemCall;
 use frame_system::{EnsureRoot, EnsureSigned};
@@ -257,7 +258,7 @@ impl pallet_multisig::Config for Runtime {
 	type WeightInfo = pallet_multisig::weights::SubstrateWeight<Runtime>;
 }
 
-// impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
 
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
@@ -588,7 +589,9 @@ impl pallet_preimage::Config for Runtime {
 
 parameter_types! {
 	pub const InitialTxRateLimit: u64 = 0;
-	pub const EpochLength: u64 = 100;
+	pub const EpochLength: u64 = 10;
+	pub const NetworkPalletId: PalletId = PalletId(*b"/network");
+	pub const SubnetInitializationCost: u128 = 100_000_000_000_000_000_000;
 }
 
 impl pallet_network::Config for Runtime {
@@ -602,11 +605,19 @@ impl pallet_network::Config for Runtime {
 	type Year = ConstU64<{ YEAR as u64 }>;
 	type OffchainSignature = Signature;
 	type OffchainPublic = AccountPublic;
+	type Randomness = InsecureRandomnessCollectiveFlip;
+	type PalletId = NetworkPalletId;
+	type SubnetInitializationCost = SubnetInitializationCost;
 }
 
 parameter_types! {
-	pub const VotingPeriod: BlockNumber = DAYS * 21;
-	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+	// pub const VotingPeriod: BlockNumber = DAYS * 21;
+	// pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+	pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
+
+	// Testing
+	pub const VotingPeriod: BlockNumber = 50; // ~5 minutes
+	pub const EnactmentPeriod: BlockNumber = 30; // ~3 minutes
 }
 
 impl pallet_model_voting::Config for Runtime {
@@ -614,11 +625,12 @@ impl pallet_model_voting::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SubnetVote = Network;
 	type Currency = Balances;
-	type MaxActivateProposals = ConstU32<32>;
+	type MaxActivateProposals = ConstU32<1>;
 	type MaxDeactivateProposals = ConstU32<32>;
 	type MaxProposals = ConstU32<32>;
 	type VotingPeriod = VotingPeriod;
 	type EnactmentPeriod = EnactmentPeriod;
+	type MinProposalStake = MinProposalStake;
 }
 
 // cargo check -p node-template-runtime --release
@@ -626,7 +638,7 @@ impl pallet_model_voting::Config for Runtime {
 construct_runtime!(
 	pub struct Runtime {
 		System: frame_system,
-		// InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
+		InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
 		Timestamp: pallet_timestamp,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
@@ -891,6 +903,10 @@ impl_runtime_apis! {
 		fn get_accountant_data(model_id: u32, id: u32) -> Vec<u8> {
 			let result = Network::get_accountant_data(model_id, id);
 			result.encode()
+		}
+		fn get_minimum_subnet_nodes(subnet_id: u32, memory_mb: u128) -> u32 {
+			let result = Network::get_minimum_subnet_nodes(subnet_id, memory_mb);
+			result
 		}
 	}
 

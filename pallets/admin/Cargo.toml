@@ -27,6 +27,9 @@ pallet-balances = { version = "4.0.0-dev", default-features = false, git = "http
 pallet-network = { version = "4.0.0-dev", default-features = false, path = "../network" }
 pallet-model-voting = { version = "4.0.0-dev", default-features = false, path = "../model-voting" }
 
+# Randomness
+pallet-insecure-randomness-collective-flip = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
+
 [dev-dependencies]
 sp-core = { version = "21.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 sp-io = { version = "23.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
@@ -43,6 +46,7 @@ std = [
 	"pallet-network/std",
 	"pallet-model-voting/std",
 	"pallet-sudo/std",
+	"pallet-insecure-randomness-collective-flip/std",
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]

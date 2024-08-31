@@ -42,7 +42,7 @@ use sp_runtime::{
   traits::Zero,
   Saturating, Perbill, Percent
 };
-use pallet_network::SubnetVote;
+use pallet_network::{SubnetVote, PreSubnetData, VoteSubnetData};
 
 #[cfg(test)]
 mod mock;
@@ -58,7 +58,7 @@ pub use weights::WeightInfo;
 
 mod types;
 mod admin;
-// mod utils;
+mod utils;
 
 pub use types::PropIndex;
 
@@ -91,6 +91,10 @@ pub mod pallet {
     #[pallet::constant]
 		type MaxProposals: Get<u32>;
 
+    /// Minimum amount to stake to create a proposal
+    #[pallet::constant]
+		type MinProposalStake: Get<u128>;
+
     #[pallet::constant]
 		type VotingPeriod: Get<BlockNumberFor<Self>>;
 
@@ -118,6 +122,10 @@ pub mod pallet {
     ProposalNotExist,
     /// Maximum proposals allowed
     MaxActiveProposals,
+    /// Maximum activate proposals allowed
+    MaxActivateProposals,
+    /// Maximum deactivate proposals allowed
+    MaxDeactivateProposals,
     /// Proposal voting period closed
     EnactmentPeriodInvalid,
     /// Proposal voting period closed
@@ -158,6 +166,7 @@ pub mod pallet {
     VoteBalanceZero,
     InvalidQuorum,
     InvalidNodeVotePremium,
+    InvalidPeerId,
   }
 
   /// `pallet-rewards` events
@@ -177,25 +186,7 @@ pub mod pallet {
 	pub struct SubnetNode<AccountId> {
     pub account_id: AccountId,
 		pub peer_id: PeerId,
-		pub ip: Vec<u8>,
-		pub port: u16,
 	}
-
-  // #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-	// pub struct SubnetData {
-  //   pub title: Vec<u8>,
-  //   pub parameters: u128,
-  //   pub 
-	// }
-
-  // #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-	// pub struct Model {
-  //   pub title: Vec<u8>, // Bloom, LLAMA, Falcon, etc.
-	// 	pub max_parameters: u128,
-  //   pub gib_per_block: u128, // 10000 == 100.00, GiB per block hosted
-  //   pub min_subnet_nodes: u32,
-  //   // pub base_rewards_per_million_parameters: u128, // This should be in the network pallet
-	// }
 
   #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct ActivatePropsParams<AccountId> {
@@ -207,9 +198,11 @@ pub mod pallet {
   #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct PropsParams<AccountId> {
     pub proposer: AccountId,
+    pub proposer_stake: u128, // Activate: Non refundable, Deactivate: Refundable
     pub proposal_status: PropsStatus,
     pub proposal_type: PropsType,
     pub path: Vec<u8>,
+    pub subnet_data: PreSubnetData,
 		pub subnet_nodes: Vec<SubnetNode<AccountId>>,
     pub max_block: u64, // block ending voting
 	}
@@ -242,8 +235,6 @@ pub mod pallet {
 		return SubnetNode {
 			account_id: T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap(),
 			peer_id: PeerId(Vec::new()),
-      ip: Vec::new(),
-      port: 0,
     };
 	}
 	#[pallet::type_value]
@@ -258,9 +249,11 @@ pub mod pallet {
 	pub fn DefaultPropsParams<T: Config>() -> PropsParams<T::AccountId> {
 		return PropsParams {
       proposer: T::AccountId::decode(&mut TrailingZeroInput::zeroes()).unwrap(),
+      proposer_stake: 0,
       proposal_status: PropsStatus::None,
       proposal_type: PropsType::None,
 			path: Vec::new(),
+      subnet_data: PreSubnetData::default(),
 			subnet_nodes: Vec::new(),
       max_block: 0,
     };
@@ -295,16 +288,13 @@ pub mod pallet {
 	pub fn DefaultQuorum() -> u128 {
     // 10,000 * 1e18
 		10000000000000000000000
+
+    // 100 * 1e18 for testing
+    // 100000000000000000000
 	}
   #[pallet::type_value]
 	pub fn DefaultMajority() -> u128 {
 		66
-	}
-
-  #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-	pub struct SubnetData {
-		pub path: Vec<u8>,
-		pub memory_mb: u128,
 	}
 
   #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
@@ -387,6 +377,12 @@ pub mod pallet {
 	pub type ActiveProposals<T> = StorageValue<_, u32, ValueQuery>;
   
   #[pallet::storage]
+	pub type ActivateProposals<T> = StorageValue<_, u32, ValueQuery>;
+
+  #[pallet::storage]
+  pub type DeactivateProposals<T> = StorageValue<_, u32, ValueQuery>;
+
+  #[pallet::storage]
   #[pallet::getter(fn votes)]
   pub type Votes<T: Config> =
     StorageMap<_, Blake2_128Concat, PropIndex, VotesParams, ValueQuery, DefaultVotes<T>>;
@@ -457,12 +453,18 @@ pub mod pallet {
 		/// May only be call to deactivate a subnet if 
     ///  - The subnet already does exist within the network pallet
     ///  - The subnet isn't already proposed to be deactivated via PropsStatus::Active
+    ///
+    /// The PreSubnetData is used to dictate the subnets rewards and node requirements.
+    /// Memory must be accurate to usage of the model for servers/
+    /// Higher memory requirements will garner higher rewards but also require increased node requirements.
+    /// Lower memory requirements will garner lower rewards but require lesser noes to operate the subnet.
     #[pallet::call_index(0)]
-    #[pallet::weight(0)]
+    #[pallet::weight(T::WeightInfo::propose())]
+    // #[pallet::weight(0)]
     pub fn propose(
       origin: OriginFor<T>, 
-      subnet_data: SubnetData,
-      subnet_nodes: Vec<SubnetNode<T::AccountId>>,
+      subnet_data: PreSubnetData,
+      mut subnet_nodes: Vec<SubnetNode<T::AccountId>>,
       proposal_type: PropsType
     ) -> DispatchResult {
       let account_id: T::AccountId = ensure_signed(origin)?;
@@ -481,17 +483,13 @@ pub mod pallet {
 
       let proposal_index = PropCount::<T>::get();
 
-      if proposal_type == PropsType::Activate {
+      let mut proposer_stake: u128 = 0;
+      let proposer_balance = T::Currency::free_balance(&account_id);
 
-        // --- Proposal prelims
-        Self::try_propose_activate(
-          account_id.clone(), 
-          subnet_data.clone(), 
-          subnet_nodes.clone()
-        ).map_err(|e| e)?;
-  
+      if proposal_type == PropsType::Activate {
         // --- Stake the value of initializing a new subnet
         let subnet_initialization_cost = T::SubnetVote::get_model_initialization_cost();
+        proposer_stake = subnet_initialization_cost;
         let subnet_initialization_cost_as_balance = Self::u128_to_balance(subnet_initialization_cost);
     
         ensure!(
@@ -499,8 +497,6 @@ pub mod pallet {
           Error::<T>::CouldNotConvertToBalance
         );
     
-        let proposer_balance = T::Currency::free_balance(&account_id);
-
         ensure!(
           proposer_balance >= subnet_initialization_cost_as_balance.unwrap(),
           Error::<T>::NotEnoughSubnetInitializationBalance
@@ -512,14 +508,33 @@ pub mod pallet {
           &account_id,
           subnet_initialization_cost_as_balance.unwrap(),
         );
-  
-        // This is not counted as a vote but is under the same ID
-        VotesBalance::<T>::insert(proposal_index, account_id.clone(), subnet_initialization_cost_as_balance.unwrap());
+
+        // --- Proposal prelims
+        Self::try_propose_activate(
+          account_id.clone(), 
+          subnet_data.clone(), 
+          subnet_nodes.clone()
+        ).map_err(|e| e)?;
       } else if proposal_type == PropsType::Deactivate {
         // --- Ensure zero subnet peers are submitted on deactivation proposals
         ensure!(
           subnet_nodes.clone().len() == 0,
           Error::<T>::SubnetNodesLengthInvalid
+        );
+
+        proposer_stake = T::MinProposalStake::get();
+        let proposer_stake_as_balance = Self::u128_to_balance(proposer_stake);
+
+        ensure!(
+          proposer_balance >= proposer_stake_as_balance.unwrap(),
+          Error::<T>::NotEnoughSubnetInitializationBalance
+        );
+    
+        // --- Reserve balance to be used once succeeded, otherwise it is freed on defeat
+        // The final initialization fee may be more or less than the current initialization cost results
+        T::Currency::reserve(
+          &account_id,
+          proposer_stake_as_balance.unwrap(),
         );
 
         // --- Proposal prelims
@@ -532,9 +547,11 @@ pub mod pallet {
         proposal_index,
         PropsParams {
           proposer: account_id.clone(),
+          proposer_stake: proposer_stake,
           proposal_status: PropsStatus::Active,
           proposal_type: proposal_type,
           path: subnet_data.clone().path,
+          subnet_data: subnet_data.clone(),
           subnet_nodes: subnet_nodes.clone(),
           max_block: Self::convert_block_as_u64(<frame_system::Pallet<T>>::block_number() + T::VotingPeriod::get()),
         },
@@ -558,8 +575,9 @@ pub mod pallet {
     ///  - Voter has enough balance
     ///
     /// Vote is based on balance and balance is staked until execution or defeat.
-    #[pallet::call_index(2)]
-    #[pallet::weight(0)]
+    #[pallet::call_index(1)]
+    // #[pallet::weight(0)]
+    #[pallet::weight(T::WeightInfo::cast_vote())]
     pub fn cast_vote(
       origin: OriginFor<T>, 
       proposal_index: PropIndex,
@@ -587,13 +605,16 @@ pub mod pallet {
     /// Vote is based on balance and balance is staked until execution or defeat.
     ///
     /// Anyone can call this
-    #[pallet::call_index(3)]
-    #[pallet::weight(0)]
+    //
+    // This cannot fail as long as the proposal ID exists, isn't concluded, and the voting period has completed
+    #[pallet::call_index(2)]
+    // #[pallet::weight(0)]
+    #[pallet::weight(T::WeightInfo::execute())]
     pub fn execute(
       origin: OriginFor<T>, 
       proposal_index: PropIndex,
     ) -> DispatchResult {
-			ensure_signed(origin)?;
+			let account_id: T::AccountId = ensure_signed(origin)?;
 
       // --- Ensure proposal exists
       ensure!(
@@ -623,6 +644,8 @@ pub mod pallet {
         Error::<T>::VoteActive
       );
 
+      // --- We made it past the voting period, we cannot fail from here
+
       // --- If enactment period has passed, expire the proposal
       // Don't revert here to allow expired paths to be reproposed
       if block > max_block + Self::convert_block_as_u64(T::EnactmentPeriod::get())  {
@@ -640,9 +663,18 @@ pub mod pallet {
       log::error!("quorum_reached {:?}", quorum_reached);
       log::error!("vote_succeeded {:?}", vote_succeeded);
 
+      let proposer_stake_as_balance = Self::u128_to_balance(proposal.proposer_stake);
+      // --- Unreserve here to pay for initialization fee or give back to proposer
+      T::Currency::unreserve(
+        &proposal.proposer,
+        proposer_stake_as_balance.unwrap(),
+      );
+    
       // --- If quorum and vote YAYS aren greater than vote NAYS, then pass, else, defeat
       if quorum_reached && vote_succeeded {
-        Self::try_succeed(proposal_index, proposal.proposal_type, proposal.path.clone())
+        // Self::try_succeed(account_id, proposal.proposer, proposal_index, proposal.proposal_type, proposal.subnet_data.clone())
+        //   .map_err(|e| e)?;
+        Self::try_succeed(account_id, proposal_index, proposal)
           .map_err(|e| e)?;
       } else if quorum_reached && !vote_succeeded {
         Self::try_defeat(proposal_index, proposal.path.clone())
@@ -658,8 +690,9 @@ pub mod pallet {
     /// Cancel a proposal
     ///
     /// Can only be called by the proposer
-    #[pallet::call_index(4)]
-    #[pallet::weight(0)]
+    #[pallet::call_index(3)]
+    // #[pallet::weight(0)]
+    #[pallet::weight(T::WeightInfo::cancel_proposal())]
     pub fn cancel_proposal(
       origin: OriginFor<T>, 
       proposal_index: PropIndex,
@@ -700,8 +733,9 @@ pub mod pallet {
     /// Unreserve vote stake
     ///
     /// Proposal must be not Active
-    #[pallet::call_index(5)]
-    #[pallet::weight(0)]
+    #[pallet::call_index(4)]
+    // #[pallet::weight(0)]
+    #[pallet::weight(T::WeightInfo::unreserve())]
     pub fn unreserve(
       origin: OriginFor<T>, 
       proposal_index: PropIndex,
@@ -739,15 +773,12 @@ pub mod pallet {
 
       let reserved = T::Currency::reserved_balance(
         &account_id,
-      );  
-
-      log::error!("balance  {:?}", balance);
-      log::error!("reserved {:?}", reserved);
+      );
 
       T::Currency::unreserve(
         &account_id,
         balance,
-      );  
+      );
   
       Ok(())
     }
@@ -762,7 +793,7 @@ pub mod pallet {
 
 // impl<T: Config + pallet::Config> Pallet<T> {
 impl<T: Config> Pallet<T> {
-  fn try_propose_activate(account_id: T::AccountId, subnet_data: SubnetData, subnet_nodes: Vec<SubnetNode<T::AccountId>>) -> DispatchResult {
+  fn try_propose_activate(account_id: T::AccountId, subnet_data: PreSubnetData, mut subnet_nodes: Vec<SubnetNode<T::AccountId>>) -> DispatchResult {
     // --- Ensure path doesn't already exist in Network or SubnetVoting
     // If it doesn't already exist, then it has either been not proposed or deactivated
     ensure!(
@@ -779,6 +810,20 @@ impl<T: Config> Pallet<T> {
       proposal_status != PropsStatus::Active,
       Error::<T>::ProposalInvalid
     );
+
+    ensure!(
+      ActivateProposals::<T>::get() < T::MaxActivateProposals::get(),
+      Error::<T>::MaxActivateProposals
+    );
+
+    // Remove duplicates based on peer_id and account_id
+    subnet_nodes.dedup_by(|a, b| a.peer_id == b.peer_id && a.account_id == b.account_id);
+
+    // --- Ensure PeerId's are validated
+    for node in subnet_nodes.iter() {
+      let valid = Self::validate_peer_id(node.clone().peer_id);
+      ensure!(valid, Error::<T>::InvalidPeerId);
+    }
 
     // --- Ensure account has enough balance to pay cost of subnet initialization
 
@@ -810,6 +855,8 @@ impl<T: Config> Pallet<T> {
       );
     }
 
+    ActivateProposals::<T>::mutate(|n: &mut u32| *n += 1);
+
     // --- Begin to begin voting
 
     Ok(())
@@ -829,6 +876,11 @@ impl<T: Config> Pallet<T> {
       Error::<T>::ProposalInvalid
     );
     
+    ensure!(
+      DeactivateProposals::<T>::get() < T::MaxDeactivateProposals::get(),
+      Error::<T>::MaxDeactivateProposals
+    );
+
     // --- Ensure proposal on subnet path not already in progress
     let proposal_status = PropsPathStatus::<T>::get(path.clone());
 
@@ -836,6 +888,8 @@ impl<T: Config> Pallet<T> {
       proposal_status != PropsStatus::Active,
       Error::<T>::ProposalInvalid
     );
+
+    DeactivateProposals::<T>::mutate(|n: &mut u32| *n += 1);
     
     Ok(())
   }
@@ -909,6 +963,10 @@ impl<T: Config> Pallet<T> {
     Ok(())
   }
 
+  fn validate_peers(subnet_nodes: Vec<SubnetNode<T::AccountId>>) -> DispatchResult {
+    Ok(())
+  }
+
   fn get_voting_power(account_id: T::AccountId, balance: BalanceOf<T>) -> u128 {
     let is_submittable_subnet_node_account: bool = T::SubnetVote::is_submittable_subnet_node_account(account_id);
 
@@ -924,7 +982,11 @@ impl<T: Config> Pallet<T> {
     Self::balance_to_u128(balance)
   }
 
-  fn try_succeed(proposal_index: PropIndex, proposal_type: PropsType, path: Vec<u8>) -> DispatchResult {
+  fn try_succeed(
+    activator: T::AccountId,
+    proposal_index: PropIndex, 
+    proposal: PropsParams<T::AccountId>, 
+  ) -> DispatchResult {
     Proposals::<T>::mutate(
       proposal_index,
       |params: &mut PropsParams<T::AccountId>| {
@@ -932,14 +994,65 @@ impl<T: Config> Pallet<T> {
       },
     );
 
-    PropsPathStatus::<T>::insert(path.clone(), PropsStatus::Succeeded);
+    PropsPathStatus::<T>::insert(proposal.clone().subnet_data.path, PropsStatus::Succeeded);
 
     ActiveProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
 
-    if proposal_type == PropsType::Activate {
-      Self::try_activate_model(path)
+    if proposal.proposal_type == PropsType::Activate {
+      ActivateProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
+      Self::try_activate_model(activator, proposal.clone().proposer, proposal.clone().subnet_data);
+      // if proposal.proposer_stake > 0 {
+      //   let proposer_stake_as_balance = Self::u128_to_balance(proposal.proposer_stake);
+      //   T::Currency::unreserve(
+      //     &proposal.proposer,
+      //     proposer_stake_as_balance.unwrap(),
+      //   );  
+      // }
+      Proposals::<T>::mutate(
+        proposal_index,
+        |params: &mut PropsParams<T::AccountId>| {
+          params.proposer_stake = 0;
+        },
+      );
+
+      // // Unreserve the proposal amount to sent to Network pallet
+      // if let Ok(()) = Self::try_activate_model(activator, proposal.clone().proposer, proposal.clone().subnet_data) {
+      //   // The activation of the subnet slashes the proposers reserves
+      // } else {
+      //   // if the activation of the subnet fails, unreserve the proposers reserve
+      //   if proposal.proposer_stake > 0 {
+      //     T::Currency::unreserve(
+      //       &proposal.proposer,
+      //       proposer_stake_as_balance.unwrap(),
+      //     );  
+      //   }
+      // }
+      // // --- Mutate the proposer stake to 0
+      // Proposals::<T>::mutate(
+      //   proposal_index,
+      //   |params: &mut PropsParams<T::AccountId>| {
+      //     params.proposer_stake = 0;
+      //   },
+      // );
+      Ok(())
     } else {
-      Self::try_deactivate_model(path)
+      DeactivateProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
+      Self::try_deactivate_model(activator, proposal.clone().proposer, proposal.clone().subnet_data);
+      // if proposal.proposer_stake > 0 {
+      //   let proposer_stake_as_balance = Self::u128_to_balance(proposal.proposer_stake);
+      //   T::Currency::unreserve(
+      //     &proposal.proposer,
+      //     proposer_stake_as_balance.unwrap(),
+      //   );  
+      // }
+      Proposals::<T>::mutate(
+        proposal_index,
+        |params: &mut PropsParams<T::AccountId>| {
+          params.proposer_stake = 0;
+        },
+      );
+      Ok(())
+
     }
   }
 
@@ -1010,12 +1123,35 @@ impl<T: Config> Pallet<T> {
   }
 
   /// Activate subnet - Someone must add_subnet once activated
-  fn try_activate_model(path: Vec<u8>) -> DispatchResult {
-    T::SubnetVote::vote_activated(path, true)
+  fn try_activate_model(activator: T::AccountId, proposer: T::AccountId, subnet_data: PreSubnetData) -> DispatchResult {
+    let vote_subnet_data = VoteSubnetData {
+      data: subnet_data.clone(),
+      active: true,
+    };
+
+    T::SubnetVote::vote_activated(
+      activator.clone(),
+      subnet_data.clone().path, 
+      proposer.clone(),
+      vote_subnet_data.clone()
+    )
   }
 
-  fn try_deactivate_model(path: Vec<u8>) -> DispatchResult {
-    T::SubnetVote::vote_activated(path, false)
+  fn try_deactivate_model(activator: T::AccountId, proposer: T::AccountId, subnet_data: PreSubnetData) -> DispatchResult {
+    let vote_subnet_data = VoteSubnetData {
+      data: subnet_data.clone(),
+      active: false,
+    };
+
+    T::SubnetVote::vote_deactivated(
+      activator.clone(),
+      subnet_data.clone().path, 
+      proposer.clone(),
+      vote_subnet_data.clone()
+    )
+
+    // T::SubnetVote::vote_activated(subnet_data.clone().path, vote_subnet_data)
+    // Ok(())
   }
 }
 

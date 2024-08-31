@@ -19,6 +19,9 @@ use num_traits::float::FloatCore; // is used in floor() ceil()
 use frame_support::dispatch::Vec;
 use scale_info::prelude::vec;
 use no_std_net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use rand::{Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use rand::RngCore;
 
 impl<T: Config> Pallet<T> {
   /// The block steps in between epochs
@@ -150,54 +153,54 @@ impl<T: Config> Pallet<T> {
     return sum / array.len() as u128;
   }
 
-  // Validates IP Address
-  pub fn validate_ip_address(ip: Vec<u8>) -> bool {
-    let ip_as_string = String::from_utf8(ip.clone()).unwrap();
+  // // Validates IP Address
+  // pub fn validate_ip_address(ip: Vec<u8>) -> bool {
+  //   let ip_as_string = String::from_utf8(ip.clone()).unwrap();
 
-    // If is in IP format
-    let is_ip_address: bool = match ip_as_string.parse::<IpAddr>() {
-      Ok(_) => true,
-      Err(_) => false
-    };
+  //   // If is in IP format
+  //   let is_ip_address: bool = match ip_as_string.parse::<IpAddr>() {
+  //     Ok(_) => true,
+  //     Err(_) => false
+  //   };
 
-    if !is_ip_address {
-      return false
-    }
+  //   if !is_ip_address {
+  //     return false
+  //   }
 
-    // Unwrap safely
-    let ip_as_string_parsed: IpAddr = ip_as_string.parse::<IpAddr>().unwrap();
+  //   // Unwrap safely
+  //   let ip_as_string_parsed: IpAddr = ip_as_string.parse::<IpAddr>().unwrap();
 
-    // May be redundant but checked
-    let is_unspecified: bool = ip_as_string_parsed.is_unspecified();
+  //   // May be redundant but checked
+  //   let is_unspecified: bool = ip_as_string_parsed.is_unspecified();
 
-    // If localhost IP address
-    let is_loopback: bool = ip_as_string_parsed.is_loopback();
+  //   // If localhost IP address
+  //   let is_loopback: bool = ip_as_string_parsed.is_loopback();
 
-    if is_unspecified || is_loopback {
-      return false
-    }
+  //   if is_unspecified || is_loopback {
+  //     return false
+  //   }
 
-    let is_ipv4: bool = ip_as_string_parsed.is_ipv4();
+  //   let is_ipv4: bool = ip_as_string_parsed.is_ipv4();
 
-    let is_ipv6: bool = ip_as_string_parsed.is_ipv6();
+  //   let is_ipv6: bool = ip_as_string_parsed.is_ipv6();
 
-    // Ensure ipv4 or ipv6
-    if !is_ipv4 && !is_ipv6 {
-      return false
-    }
+  //   // Ensure ipv4 or ipv6
+  //   if !is_ipv4 && !is_ipv6 {
+  //     return false
+  //   }
     
-    // All checks have passed return true
-		true
-	}
+  //   // All checks have passed return true
+	// 	true
+	// }
 
-  // Validates Port
-  pub fn validate_port(port: u16) -> bool {
-		if port.clamp(0, u16::MAX) <= 0 {
-			return false;
-		}
+  // // Validates Port
+  // pub fn validate_port(port: u16) -> bool {
+	// 	if port.clamp(0, u16::MAX) <= 0 {
+	// 		return false;
+	// 	}
 
-		true
-	}
+	// 	true
+	// }
 
   // Loosely validates Node ID
   pub fn validate_peer_id(peer_id: PeerId) -> bool {
@@ -258,8 +261,6 @@ impl<T: Config> Pallet<T> {
     ) as u32 + min_subnet_nodes
   }
 
-
-
   // pub fn get_percentage_as_u128(x: u128, y: u128) -> u128 {
   //   // Convert to percentage u128.
   //   if x == 0 || y == 0 {
@@ -277,24 +278,25 @@ impl<T: Config> Pallet<T> {
   }
 
   pub fn get_model_initialization_cost(block: u64) -> u128 {
-    let mut subnet_nodes_included_count: u128 = 0;
-    let epoch_length: u64 = T::EpochLength::get();
-    let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
+    // let mut subnet_nodes_included_count: u128 = 0;
+    // let epoch_length: u64 = T::EpochLength::get();
+    // let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
 
-    for subnet_node in SubnetNodesData::<T>::iter_values() {
-      let is_included: bool = block >= Self::get_eligible_epoch_block(
-        epoch_length, 
-        subnet_node.initialized, 
-        min_required_consensus_inclusion_epochs
-      );
+    // for subnet_node in SubnetNodesData::<T>::iter_values() {
+    //   let is_included: bool = block >= Self::get_eligible_epoch_block(
+    //     epoch_length, 
+    //     subnet_node.initialized, 
+    //     min_required_consensus_inclusion_epochs
+    //   );
 
-      if is_included {
-        subnet_nodes_included_count += 1;
-      }
-    }
+    //   if is_included {
+    //     subnet_nodes_included_count += 1;
+    //   }
+    // }
 
-    let init_cost = SubnetPerNodeInitCost::<T>::get();
-    subnet_nodes_included_count * init_cost
+    // let init_cost = SubnetPerNodeInitCost::<T>::get();
+    // subnet_nodes_included_count * init_cost
+    T::SubnetInitializationCost::get()
   }
 
   // Returns true if consensus block steps are being performed
@@ -610,24 +612,6 @@ impl<T: Config> Pallet<T> {
     total_submit_eligible_subnet_nodes
   }
 
-  // pub fn is_accountant(
-  //   subnet_id: u32, 
-  //   account_id: u32
-  // ) -> bool {
-  //   let account_subnet_node = SubnetNodesData::<T>::get(subnet_id, account_id.clone());
-  //   let submitter_peer_initialized: u64 = account_subnet_node.initialized;
-  //   let block: u64 = Self::get_current_block_as_u64();
-  //   let epoch_length: u64 = T::EpochLength::get();
-  //   let min_required_peer_accountant_epochs: u64 = MinRequiredNodeAccountantEpochs::<T>::get();
-
-  //   return Self::is_epoch_block_eligible(
-  //     block, 
-  //     epoch_length, 
-  //     min_required_peer_accountant_epochs, 
-  //     submitter_peer_initialized
-  //   )
-  // }
-
   /// Check if subnet ID exists and account has a subnet peer within subnet ID exists
   pub fn is_model_and_subnet_node(subnet_id: u32, account_id: T::AccountId) -> bool {
     if !SubnetsData::<T>::contains_key(subnet_id) {
@@ -660,33 +644,17 @@ impl<T: Config> Pallet<T> {
     return subnet_node_account_exists
   }
 
-  pub fn transition_idle_to_included() {
-
-  }
-
-  pub fn transition_included_to_submittable() {
-
-  }
-
-  pub fn transition_submittable_to_accountant() {
-
-  }
-
   /// Shift up subnet nodes to new classifications
   // This is used to know the len() of each class of subnet nodes instead of iterating through each time
   pub fn shift_node_classes(block: u64, epoch_length: u64) {
     for (subnet_id, _) in SubnetsData::<T>::iter() {
       let class_ids = SubnetNodeClass::iter();
       let last_class_id = class_ids.clone().last().unwrap();
-      log::error!("last_class_id {:?}", last_class_id);
-
       for mut class_id in class_ids {
         // Can't increase user class after last so skip
         if class_id == last_class_id {
           continue;
         }
-
-        log::error!("current class_id {:?}", class_id);
 
         // If there are none in the class, then skip
         // let node_sets: BTreeMap<T::AccountId, u64> = SubnetNodesClasses::<T>::get(
@@ -705,13 +673,13 @@ impl<T: Config> Pallet<T> {
           continue;
         }
         
+        log::error!("node_sets.len() {:?}", node_sets.len());
+
         // --- Get next class to shift into
         let class_index = class_id.index();
-        log::error!("class_index {:?}", last_class_id);
 
         // --- Safe unwrap from `continue` from last
         let next_class_id: SubnetNodeClass = SubnetNodeClass::from_repr(class_index + 1).unwrap();
-        log::error!("next_class_id {:?}", next_class_id);
 
         // --- Copy the node sets for mutation
         let mut node_sets_copy: BTreeMap<T::AccountId, u64> = node_sets.clone();
@@ -721,13 +689,20 @@ impl<T: Config> Pallet<T> {
           Ok(next_node_sets) => next_node_sets,
           Err(_) => BTreeMap::new(),
         };
-    
+
         // --- Get epochs required to be in class from the initialization block
         let epochs = SubnetNodeClassEpochs::<T>::get(class_id.clone());
-        log::error!("epochs {:?}", epochs);
 
         for node_set in node_sets.iter() {
-          if let Ok(subnet_node_data) = SubnetNodesData::<T>::try_get(subnet_id, node_set.0) {
+          let account_eligible: bool = Self::is_account_eligible(node_set.0.clone());
+
+          if !account_eligible {
+            next_node_sets.remove(&node_set.0.clone());
+            node_sets_copy.remove(&node_set.0.clone());
+            continue;
+          }
+
+          if let Ok(subnet_node_data) = SubnetNodesData::<T>::try_get(subnet_id, node_set.0.clone()) {
             let initialized: u64 = subnet_node_data.initialized;
             if Self::is_epoch_block_eligible(
               block, 
@@ -735,14 +710,12 @@ impl<T: Config> Pallet<T> {
               epochs, 
               initialized
             ) {
-              log::error!("node_set insert");
               // --- Insert to the next classification, will only insert if doesn't already exist
               next_node_sets.insert(node_set.0.clone(), *node_set.1);
             }  
           } else {
-            log::error!("node_set node exists remove");
             // Remove the account from classification if they don't exist anymore
-            node_sets_copy.remove(node_set.clone().0);
+            node_sets_copy.remove(&node_set.0.clone());
           }
         }
         // --- Update classifications
@@ -752,9 +725,46 @@ impl<T: Config> Pallet<T> {
     }
   }
 
-  pub fn do_choose_validator_and_accountants(epoch: u32) {
-    for (subnet_id, _) in SubnetsData::<T>::iter() {
+  pub fn do_choose_validator_and_accountants(block: u64, epoch: u32, epoch_length: u64) {
+    let min_required_model_consensus_submit_epochs = MinRequiredSubnetConsensusSubmitEpochs::<T>::get();
+    let target_accountants_len: u32 = TargetAccountantsLength::<T>::get();
 
+    // let mut validator_small_rng = SmallRng::seed_from_u64(block);
+
+    // --- Ensure randomization isn't using the same seed
+    // let mut accountants_small_rng = SmallRng::seed_from_u64(block + 1);
+
+    // let generate_random_number = Self::generate_random_number(block as u32);
+    // let get_random_number = Self::get_random_number(100, block as u32);
+    // log::error!("do_choose_validator_and_accountants generate_random_number {:?}", generate_random_number);
+    // log::info!("do_choose_validator_and_accountants get_random_number {:?}", get_random_number);
+
+    for (subnet_id, data) in SubnetsData::<T>::iter() {
+      let min_subnet_nodes = data.min_nodes;
+
+      // --- Ensure model is able to submit consensus
+      if block < Self::get_eligible_epoch_block(
+        epoch_length, 
+        data.initialized, 
+        min_required_model_consensus_submit_epochs
+      ) {
+        continue
+      }
+
+      Self::choose_validator(
+        block,
+        subnet_id,
+        min_subnet_nodes,
+        epoch,
+      );
+
+      Self::choose_accountants(
+        block,
+        epoch,
+        subnet_id,
+        min_subnet_nodes,
+        target_accountants_len,
+      );
     }
   }
 

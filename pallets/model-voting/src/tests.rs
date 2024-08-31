@@ -25,7 +25,7 @@ use frame_support::traits::Currency;
 use sp_core::OpaquePeerId as PeerId;
 use crate::{
   Error, SubnetNode, PropsType, SubnetVote, VotesBalance, ReservableCurrency, PropCount, VoteType,
-  Votes, ActiveProposals, Proposals, PropsStatus, Quorum, PropsPathStatus, BalanceOf, SubnetData
+  Votes, ActiveProposals, Proposals, PropsStatus, Quorum, PropsPathStatus, BalanceOf, PreSubnetData,
 };
 type AccountIdOf<Test> = <Test as frame_system::Config>::AccountId;
 
@@ -49,16 +49,16 @@ fn default_model_path() -> Vec<u8> {
   DEFAULT_MODEL_PATH.into()
 }
 
-fn default_add_subnet_data() -> SubnetData {
-  let subnet_data = SubnetData {
+fn default_add_subnet_data() -> PreSubnetData {
+  let subnet_data = PreSubnetData {
     path: DEFAULT_MODEL_PATH.into(),
 		memory_mb: 50000,
   };
   subnet_data
 }
 
-fn default_existing_add_subnet_data() -> SubnetData {
-  let subnet_data = SubnetData {
+fn default_existing_add_subnet_data() -> PreSubnetData {
+  let subnet_data = PreSubnetData {
     path: DEFAULT_EXISTING_MODEL_PATH.into(),
 		memory_mb: 50000,
   };
@@ -69,23 +69,69 @@ fn default_ip() -> Vec<u8> {
   DEFAULT_IP.into()
 }
 
+fn get_default_min_subnet_nodes() -> u32 {
+  let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_min_subnet_nodes(
+    default_add_subnet_data().memory_mb
+  );
+  min_subnet_nodes
+}
+
+fn get_default_existing_min_subnet_nodes() -> u32 {
+  let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_min_subnet_nodes(
+    default_existing_add_subnet_data().memory_mb
+  );
+  min_subnet_nodes
+}
+
 fn build_existing_model(start: u32, end: u32) {
   let model_path: Vec<u8> = DEFAULT_EXISTING_MODEL_PATH.into();
   let min_subnet_nodes = pallet_network::MinSubnetNodes::<Test>::get();
 
+  let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
+  let _ = Balances::deposit_creating(&account(0), model_initialization_cost+1000);
+
+  let add_subnet_data = PreSubnetData {
+    path: model_path.clone(),
+    memory_mb: 50000,
+  };
   assert_ok!(
-    Network::vote_model(
-      RuntimeOrigin::signed(account(0)), 
-      model_path.clone(),
+    Network::activate_subnet(
+      account(0),
+      account(0),
+      add_subnet_data,
     )
   );
 
-  assert_ok!(
-    Network::add_model(
-      RuntimeOrigin::signed(account(0)),
-      model_path.clone(),
-    ) 
-  );
+  // assert_ok!(
+  //   Network::vote_model(
+  //     RuntimeOrigin::signed(account(0)), 
+  //     model_path.clone(),
+  //   )
+  // );
+
+  // let add_subnet_data = PreSubnetData {
+  //   path: model_path.clone(),
+  //   memory_mb: 50000,
+  // };
+
+  // assert_ok!(
+  //   Network::add_subnet(
+  //     RuntimeOrigin::signed(account(0)),
+  //     add_subnet_data.clone(),
+  //   ) 
+  // );
+  // let add_subnet_data = PreSubnetData {
+  //   path: model_path.clone(),
+  //   memory_mb: 50000,
+  // };
+
+  // assert_ok!(
+  //   Network::activate_subnet(
+  //     account(0),
+  //     account(0),
+  //     add_subnet_data,
+  //   )
+  // );  
 
   let model_id = pallet_network::SubnetPaths::<Test>::get(model_path.clone()).unwrap();
   let min_stake = pallet_network::MinStakeBalance::<Test>::get();
@@ -97,8 +143,8 @@ fn build_existing_model(start: u32, end: u32) {
         RuntimeOrigin::signed(account(n)),
         model_id,
         peer(n),
-        "172.20.54.234".into(),
-        8888,
+        // "172.20.54.234".into(),
+        // 8888,
         min_stake,
       ) 
     );
@@ -113,8 +159,6 @@ fn build_subnet_nodes(start: u32, end: u32, deposit_amount: u128) -> Vec<SubnetN
     let subnet_node = SubnetNode {
       account_id: account(n),
       peer_id: peer(n),
-      ip: default_ip(),
-      port: DEFAULT_PORT,
     };
     subnet_nodes.push(subnet_node);
   }
@@ -129,12 +173,12 @@ fn post_success_proposal_activate_ensures(path: Vec<u8>, proposal_index: u32, pr
   // assert_eq!(proposal.subnet_nodes, path);
   assert_eq!(proposal.max_block, proposal_start_block + VotingPeriod::get());
 
-  let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
-  assert_eq!(VotesBalance::<Test>::get(0, account(proposer)), model_initialization_cost.clone());
+  // let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+  // assert_eq!(VotesBalance::<Test>::get(0, account(proposer)), model_initialization_cost.clone());
 
-  // let reserved_balance = <pallet_balances::Pallet<Test> as ReservableCurrency<Test>>::reserved_balance(&proposer);
-  let reserved_balance = Balances::reserved_balance(&account(proposer));
-  assert_eq!(reserved_balance, model_initialization_cost.clone());
+  // // let reserved_balance = <pallet_balances::Pallet<Test> as ReservableCurrency<Test>>::reserved_balance(&proposer);
+  // let reserved_balance = Balances::reserved_balance(&account(proposer));
+  // assert_eq!(reserved_balance, model_initialization_cost.clone());
 
   let active_proposals = ActiveProposals::<Test>::get();
   assert_eq!(active_proposals, proposal_index + 1);
@@ -154,11 +198,18 @@ fn post_cast_vote_ensures(proposal_index: u32, voter: u32) {
 }
 
 fn post_yay_ensures(proposal_index: u32, prev_votes: u128, voter: u32, vote_amount: u128) {
-  let reserved_balance = Balances::reserved_balance(&account(voter));
-  assert_eq!(reserved_balance, vote_amount);
+  let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
 
+  let reserved_balance = Balances::reserved_balance(&account(voter));
   let voting_power = SubnetVoting::get_voting_power(account(voter), vote_amount);
-  assert_eq!(VotesBalance::<Test>::get(proposal_index, account(voter)), voting_power);
+
+  if voter == 0 {
+    assert_eq!(reserved_balance, vote_amount + model_initialization_cost);
+  } else {
+    assert_eq!(reserved_balance, vote_amount);
+  }
+
+  assert_eq!(VotesBalance::<Test>::get(proposal_index, account(voter)), voting_power);  
 
   let votes = Votes::<Test>::get(proposal_index);
 
@@ -166,10 +217,17 @@ fn post_yay_ensures(proposal_index: u32, prev_votes: u128, voter: u32, vote_amou
 }
 
 fn post_nay_ensures(proposal_index: u32, prev_votes: u128, voter: u32, vote_amount: u128) {
-  let reserved_balance = Balances::reserved_balance(&account(voter));
-  assert_eq!(reserved_balance, vote_amount);
+  let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
 
+  let reserved_balance = Balances::reserved_balance(&account(voter));
   let voting_power = SubnetVoting::get_voting_power(account(voter), vote_amount);
+
+  if voter == 0 {
+    assert_eq!(reserved_balance, vote_amount + model_initialization_cost);
+  } else {
+    assert_eq!(reserved_balance, vote_amount);
+  }
+
   assert_eq!(VotesBalance::<Test>::get(proposal_index, account(voter)), voting_power);
 
   let votes = Votes::<Test>::get(proposal_index);
@@ -179,7 +237,12 @@ fn post_nay_ensures(proposal_index: u32, prev_votes: u128, voter: u32, vote_amou
 
 fn post_abstain_ensures(proposal_index: u32, prev_votes: u128, voter: u32, vote_amount: u128) {
   let reserved_balance = Balances::reserved_balance(&account(voter));
-  assert_eq!(reserved_balance, vote_amount);
+  if voter == 0 {
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
+    assert_eq!(reserved_balance, vote_amount + model_initialization_cost);  
+  } else {
+    assert_eq!(reserved_balance, vote_amount);  
+  }
 
   let voting_power = SubnetVoting::get_voting_power(account(voter), vote_amount);
   assert_eq!(VotesBalance::<Test>::get(proposal_index, account(voter)), voting_power);
@@ -191,11 +254,12 @@ fn post_abstain_ensures(proposal_index: u32, prev_votes: u128, voter: u32, vote_
 
 
 fn post_activate_execute_succeeded_ensures(proposal_index: u32, path: Vec<u8>) {
-  let is_active = pallet_network::SubnetActivated::<Test>::get(path.clone());
-  assert_eq!(is_active, Some(true));
+  let vote_subnet_data = pallet_network::SubnetActivated::<Test>::get(path.clone());
+  assert_eq!(vote_subnet_data.active, true);
 
   let proposal = Proposals::<Test>::get(proposal_index);
   assert_eq!(proposal.proposal_status, PropsStatus::Succeeded);
+  assert_eq!(proposal.proposer_stake, 0);
 
   let active_proposals = ActiveProposals::<Test>::get();
   assert_eq!(active_proposals, proposal_index);
@@ -204,11 +268,19 @@ fn post_activate_execute_succeeded_ensures(proposal_index: u32, path: Vec<u8>) {
 
   let proposal_path_status = PropsPathStatus::<Test>::get(path.clone());
   assert_eq!(proposal_path_status, PropsStatus::Succeeded);
+
+  // Check that the subnet has been added to the network pallet
+  let subnet_id = pallet_network::SubnetPaths::<Test>::get(path.clone()).unwrap();
+  assert!(subnet_id != 0, "Subnet path has no subnet ID");
+  
+  let model_data = pallet_network::SubnetsData::<Test>::get(subnet_id);
+  let model_path: Vec<u8> = model_data.unwrap().path;
+  assert_eq!(model_path, path);
 }
 
 fn post_deactivate_succeeded_execute_ensures(proposal_index: u32, path: Vec<u8>) {
-  let is_active = pallet_network::SubnetActivated::<Test>::get(path.clone());
-  assert_eq!(is_active, Some(false));
+  let vote_subnet_data = pallet_network::SubnetActivated::<Test>::get(path.clone());
+  assert_eq!(vote_subnet_data.active, false);
 
   let proposal = Proposals::<Test>::get(proposal_index);
   assert_eq!(proposal.proposal_status, PropsStatus::Succeeded);
@@ -220,12 +292,17 @@ fn post_deactivate_succeeded_execute_ensures(proposal_index: u32, path: Vec<u8>)
 
   let proposal_path_status = PropsPathStatus::<Test>::get(path.clone());
   assert_eq!(proposal_path_status, PropsStatus::Succeeded);
+
+  // Ensure path is removed
+  let subnet_id = pallet_network::SubnetPaths::<Test>::get(path.clone());
+  assert_eq!(subnet_id, None);
 }
 
 
 fn post_activate_cancel_ensures(proposal_index: u32, path: Vec<u8>) {
-  let is_active = pallet_network::SubnetActivated::<Test>::get(path.clone());
-  assert_eq!(is_active, None);
+  let vote_subnet_data = pallet_network::SubnetActivated::<Test>::get(path.clone());
+  // assert_eq!(vote_subnet_data, None);
+  assert_eq!(vote_subnet_data.active, false);
 
   let proposal = Proposals::<Test>::get(proposal_index);
   assert_eq!(proposal.proposal_status, PropsStatus::Cancelled);
@@ -289,6 +366,7 @@ fn post_proposal_concluded(proposal_index: u32, path: Vec<u8>) {
 }
 
 fn post_proposal_conclusion_unreserves(proposal_index: u32, start: u32, end: u32, vote_amount: u128) {
+  let proposal = Proposals::<Test>::get(proposal_index);
   for n in start..end {
     let beginning_balance = Balances::free_balance(&account(n));
     let votes_balance = VotesBalance::<Test>::get(proposal_index, account(n));
@@ -306,10 +384,16 @@ fn post_proposal_conclusion_unreserves(proposal_index: u32, start: u32, end: u32
     let votes_balance = VotesBalance::<Test>::get(proposal_index, account(n));
     assert_eq!(votes_balance, 0);
   }
+  // check proposers reserve
+  let proposers_reserve = Balances::reserved_balance(&account(0));
+  assert_eq!(proposers_reserve, 0);
 }
 
 fn build_propose_activate(path: Vec<u8>, start: u32, end: u32, deposit_amount: u128) -> u32 {
   let subnet_nodes = build_subnet_nodes(start, end, deposit_amount);
+
+  let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
+  let _ = Balances::deposit_creating(&account(0), model_initialization_cost+1000);
 
   assert_ok!(
     SubnetVoting::propose(
@@ -326,7 +410,11 @@ fn build_propose_activate(path: Vec<u8>, start: u32, end: u32, deposit_amount: u
 /// Uses existing model paths
 fn build_propose_deactivate(path: Vec<u8>, start: u32, end: u32, deposit_amount: u128) -> u32 {
   // let min_subnet_nodes = pallet_network::MinSubnetNodes::<Test>::get();
-  let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+  // let min_subnet_nodes = <pallet_network::Pallet<<Test>::AccountId = Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+  // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+
+  // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+  let min_subnet_nodes = get_default_min_subnet_nodes();
   build_existing_model(0, min_subnet_nodes);
 
   let subnet_nodes = build_subnet_nodes(start, end, deposit_amount);
@@ -339,6 +427,9 @@ fn build_propose_deactivate(path: Vec<u8>, start: u32, end: u32, deposit_amount:
   // pallet_network::SubnetConsensusEpochsErrors::<Test>::insert(model_id, 1);
 
   System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
+
+  let proposer_stake = MinProposalStake::get();
+  let _ = Balances::deposit_creating(&account(0), proposer_stake);
 
   assert_ok!(
     SubnetVoting::propose(
@@ -363,10 +454,11 @@ fn test_propose_activate() {
     let prop_count = PropCount::<Test>::get();
 
     // let min_subnet_nodes = pallet_network::MinSubnetNodes::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
-
+    // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
-    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     let subnet_nodes = build_subnet_nodes(0, min_subnet_nodes, min_stake);
@@ -385,20 +477,55 @@ fn test_propose_activate() {
 }
 
 #[test]
+fn test_propose_activate_duplicat_nodes() {
+  new_test_ext().execute_with(|| {
+    let prop_count = PropCount::<Test>::get();
+
+    let min_subnet_nodes = get_default_min_subnet_nodes();
+    let min_stake = pallet_network::MinStakeBalance::<Test>::get();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
+    let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
+
+    let mut subnet_nodes: Vec<SubnetNode<<Test as frame_system::Config>::AccountId>> = Vec::new();
+  
+    for n in 0..min_subnet_nodes {
+      let _ = Balances::deposit_creating(&account(0), min_stake);
+      let subnet_node = SubnetNode {
+        account_id: account(0),
+        peer_id: peer(0),
+      };
+      subnet_nodes.push(subnet_node);
+    }
+  
+    assert_err!(
+      SubnetVoting::propose(
+        RuntimeOrigin::signed(account(0)),
+        default_add_subnet_data(), 
+        subnet_nodes,
+        PropsType::Activate,
+      ),
+      Error::<Test>::SubnetNodesLengthInvalid,
+    );
+  })
+}
+
+
+#[test]
 fn test_propose_activate_model_path_exists_err() {
   new_test_ext().execute_with(|| {
 
     // let min_subnet_nodes = pallet_network::MinSubnetNodes::<Test>::get();
 
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
-
+    // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     // Create existing model
     build_existing_model(0, min_subnet_nodes);
     let model_data = pallet_network::SubnetsData::<Test>::get(1);
     let model_path: Vec<u8> = model_data.unwrap().path;
 
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
-    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     assert_err!(
@@ -416,9 +543,10 @@ fn test_propose_activate_model_path_exists_err() {
 #[test]
 fn test_propose_activate_already_active_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
-    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     let subnet_nodes = build_subnet_nodes(0, min_subnet_nodes, min_stake);
@@ -450,9 +578,9 @@ fn test_propose_activate_already_active_err() {
 #[test]
 fn test_propose_activate_peers_min_length_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
-    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     assert_err!(
@@ -470,9 +598,9 @@ fn test_propose_activate_peers_min_length_err() {
 #[test]
 fn test_propose_activate_peers_balance_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
-    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     let subnet_nodes = build_subnet_nodes(0, min_subnet_nodes, min_stake-10000);
@@ -492,11 +620,11 @@ fn test_propose_activate_peers_balance_err() {
 #[test]
 fn test_propose_activate_model_init_balance_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     let offset = 1;
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
 
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    // let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
     // add model to ensure initialization cost is over zero
     build_existing_model(offset, min_subnet_nodes + offset);
 
@@ -531,7 +659,7 @@ fn test_propose_activate_model_init_balance_err() {
 fn test_cast_vote_activate_yay() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 
@@ -572,7 +700,7 @@ fn test_cast_vote_activate_yay_props_exists_err() {
 fn test_cast_vote_activate_yay_voting_not_open_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 
@@ -600,15 +728,15 @@ fn test_cast_vote_activate_yay_not_enough_balance_err() {
   new_test_ext().execute_with(|| {
     let offset = 1;
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0+offset, min_subnet_nodes+offset, DEFAULT_DEPOSIT_AMOUNT);
     
-    let _ = Balances::deposit_creating(&account(0), DEFAUT_VOTE_AMOUNT-1000);
+    let _ = Balances::deposit_creating(&account(255), 100);
 
     assert_err!(
       SubnetVoting::cast_vote(
-        RuntimeOrigin::signed(account(0)),
+        RuntimeOrigin::signed(account(255)),
         proposal_index,
         DEFAUT_VOTE_AMOUNT,
         VoteType::Yay,
@@ -622,7 +750,7 @@ fn test_cast_vote_activate_yay_not_enough_balance_err() {
 fn test_cast_vote_activate_nay() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 
@@ -663,7 +791,7 @@ fn test_cast_vote_activate_nay_props_exists_err() {
 fn test_cast_vote_activate_nay_voting_not_open_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 
@@ -691,15 +819,15 @@ fn test_cast_vote_activate_nay_not_enough_balance_err() {
   new_test_ext().execute_with(|| {
     let offset = 1;
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0+offset, min_subnet_nodes+offset, DEFAULT_DEPOSIT_AMOUNT);
     
-    let _ = Balances::deposit_creating(&account(0), DEFAUT_VOTE_AMOUNT-1000);
+    let _ = Balances::deposit_creating(&account(255), 100);
 
     assert_err!(
       SubnetVoting::cast_vote(
-        RuntimeOrigin::signed(account(0)),
+        RuntimeOrigin::signed(account(255)),
         proposal_index,
         DEFAUT_VOTE_AMOUNT,
         VoteType::Nay,
@@ -713,7 +841,7 @@ fn test_cast_vote_activate_nay_not_enough_balance_err() {
 fn test_cast_vote_activate_abstain() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 
@@ -754,7 +882,7 @@ fn test_cast_vote_activate_abstain_props_exists_err() {
 fn test_cast_vote_activate_abstain_voting_not_open_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
 
@@ -781,15 +909,15 @@ fn test_cast_vote_activate_abstain_not_enough_balance_err() {
   new_test_ext().execute_with(|| {
     let offset = 1;
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0+offset, min_subnet_nodes+offset, DEFAULT_DEPOSIT_AMOUNT);
     
-    let _ = Balances::deposit_creating(&account(0), DEFAUT_VOTE_AMOUNT-1000);
+    let _ = Balances::deposit_creating(&account(255), 100);
 
     assert_err!(
       SubnetVoting::cast_vote(
-        RuntimeOrigin::signed(account(0)),
+        RuntimeOrigin::signed(account(255)),
         proposal_index,
         DEFAUT_VOTE_AMOUNT,
         VoteType::Abstain,
@@ -803,7 +931,7 @@ fn test_cast_vote_activate_abstain_not_enough_balance_err() {
 fn test_execute_activate_succeeded() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -841,7 +969,7 @@ fn test_execute_activate_succeeded() {
 fn test_execute_voting_period_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -873,7 +1001,7 @@ fn test_execute_voting_period_err() {
 fn test_execute_enactment_period_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -909,10 +1037,12 @@ fn test_execute_enactment_period_err() {
 #[test]
 fn test_execute_quorum_not_reached_err() {
   new_test_ext().execute_with(|| {
+    let quorum = Quorum::<Test>::get();
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
+    
     
     for n in 0..min_subnet_nodes {
       let _ = Balances::deposit_creating(&account(n), DEFAUT_VOTE_AMOUNT);
@@ -921,7 +1051,7 @@ fn test_execute_quorum_not_reached_err() {
         SubnetVoting::cast_vote(
           RuntimeOrigin::signed(account(n)),
           proposal_index,
-          100, // too low to reach minimum quorum
+          1, // too low to reach minimum quorum
           VoteType::Yay,
         )
       );
@@ -941,7 +1071,6 @@ fn test_execute_quorum_not_reached_err() {
         RuntimeOrigin::signed(account(0)),
         proposal_index,
       )
-      // Error::<Test>::EnactmentPeriodPassed
     );
 
     let proposal = Proposals::<Test>::get(proposal_index);
@@ -954,7 +1083,8 @@ fn test_execute_quorum_not_reached_err() {
     assert_eq!(proposal.proposal_status, PropsStatus::Expired);
 
     let is_active = pallet_network::SubnetActivated::<Test>::get(path);
-    assert_eq!(is_active, None);
+    assert_eq!(is_active.active, false);
+
 
     post_proposal_conclusion_unreserves(proposal_index, 0, min_subnet_nodes, DEFAUT_VOTE_AMOUNT);
   })
@@ -964,7 +1094,7 @@ fn test_execute_quorum_not_reached_err() {
 fn test_execute_defeated() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     // if min_subnet_nodes < 12 {
     //   min_subnet_nodes = 12
@@ -1033,7 +1163,7 @@ fn test_execute_defeated() {
 fn test_execute_cancelled() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -1066,7 +1196,7 @@ fn test_execute_cancelled() {
 fn test_execute_cancelled_not_proposer_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -1098,7 +1228,7 @@ fn test_execute_cancelled_not_proposer_err() {
 fn test_execute_cancelled_proposal_index_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -1130,7 +1260,7 @@ fn test_execute_cancelled_proposal_index_err() {
 fn test_execute_cancelled_vote_completed_err() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
 
     let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     
@@ -1165,7 +1295,7 @@ fn test_execute_cancelled_vote_completed_err() {
 #[test]
 fn test_propose_deactivate() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     build_existing_model(0, min_subnet_nodes);
     let prop_count = PropCount::<Test>::get();
 
@@ -1178,6 +1308,9 @@ fn test_propose_deactivate() {
   
     System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
+    let proposer_stake = MinProposalStake::get();
+    let _ = Balances::deposit_creating(&account(0), proposer_stake);
+  
     assert_ok!(
       SubnetVoting::propose(
         RuntimeOrigin::signed(account(0)),
@@ -1194,10 +1327,10 @@ fn test_propose_deactivate() {
 #[test]
 fn test_propose_deactivate_peers_min_length_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     build_existing_model(0, min_subnet_nodes);
     let min_stake = pallet_network::MinStakeBalance::<Test>::get();
-    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_model_initialization_cost();
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
     let _ = Balances::deposit_creating(&account(0), model_initialization_cost);
 
     let subnet_nodes = build_subnet_nodes(0, min_subnet_nodes, min_stake);
@@ -1207,6 +1340,9 @@ fn test_propose_deactivate_peers_min_length_err() {
 
     System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
+    let proposer_stake = MinProposalStake::get();
+    let _ = Balances::deposit_creating(&account(0), proposer_stake);
+  
     assert_err!(
       SubnetVoting::propose(
         RuntimeOrigin::signed(account(0)),
@@ -1222,7 +1358,9 @@ fn test_propose_deactivate_peers_min_length_err() {
 #[test]
 fn test_propose_deactivate_model_id_exist_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
+    let proposer_stake = MinProposalStake::get();
+    let _ = Balances::deposit_creating(&account(0), proposer_stake);
 
     assert_err!(
       SubnetVoting::propose(
@@ -1239,7 +1377,7 @@ fn test_propose_deactivate_model_id_exist_err() {
 #[test]
 fn test_propose_deactivate_already_active_err() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_existing_min_subnet_nodes();
     build_existing_model(0, min_subnet_nodes);
 
     let submit_epochs = pallet_network::MinRequiredSubnetConsensusSubmitEpochs::<Test>::get();
@@ -1251,6 +1389,9 @@ fn test_propose_deactivate_already_active_err() {
   
     System::set_block_number(System::block_number() + submit_epochs * epoch_length + 1000);
 
+    let proposer_stake = MinProposalStake::get();
+    let _ = Balances::deposit_creating(&account(0), proposer_stake + 1000);
+  
     assert_ok!(
       SubnetVoting::propose(
         RuntimeOrigin::signed(account(0)),
@@ -1259,6 +1400,9 @@ fn test_propose_deactivate_already_active_err() {
         PropsType::Deactivate,
       )
     );
+
+    let proposer_stake = MinProposalStake::get();
+    let _ = Balances::deposit_creating(&account(0), proposer_stake + 1000);
 
     assert_err!(
       SubnetVoting::propose(
@@ -1276,10 +1420,10 @@ fn test_propose_deactivate_already_active_err() {
 fn test_execute_deactivate_succeeded() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_existing_min_subnet_nodes();
 
     let proposal_index = build_propose_deactivate(DEFAULT_EXISTING_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
-
+    
     for n in 0..min_subnet_nodes {
       let _ = Balances::deposit_creating(&account(n), DEFAUT_VOTE_AMOUNT);
   
@@ -1313,7 +1457,7 @@ fn test_execute_deactivate_succeeded() {
 #[test]
 fn test_propose_activate_expired() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     build_existing_model(0, min_subnet_nodes);
     let prop_count = PropCount::<Test>::get();
 
@@ -1342,14 +1486,16 @@ fn test_propose_activate_expired() {
     assert_eq!(proposal.proposal_status, PropsStatus::Expired);
 
     let is_active = pallet_network::SubnetActivated::<Test>::get(path);
-    assert_eq!(is_active, None);
+    // assert_eq!(is_active, None);
+    assert_eq!(is_active.active, false);
+
   })
 }
 
 #[test]
 fn test_balance_on_multiple_votes() {
   new_test_ext().execute_with(|| {
-    let min_subnet_nodes = <pallet_network::Pallet<Test> as SubnetVote<Test>>::get_min_subnet_nodes(default_add_subnet_data().memory_mb);
+    let min_subnet_nodes = get_default_min_subnet_nodes();
     build_existing_model(0, min_subnet_nodes);
     let prop_count = PropCount::<Test>::get();
 
@@ -1368,12 +1514,18 @@ fn test_balance_on_multiple_votes() {
       );
     }
 
+    let model_initialization_cost = <pallet_network::Pallet<Test> as SubnetVote<<Test as frame_system::Config>::AccountId>>::get_model_initialization_cost();
+
     for n in 0..min_subnet_nodes {
       let votes_balance = VotesBalance::<Test>::get(proposal_index, account(n));
-      assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT);
-
       let reserve_balance: BalanceOf<Test> = <pallet_balances::Pallet<Test> as ReservableCurrency<AccountId>>::reserved_balance(&account(n));
-      assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT);
+      if n == 0 {
+        assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT);
+        assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT + model_initialization_cost);
+      } else {
+        assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT);
+        assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT);
+      }
     }
 
     for n in 0..min_subnet_nodes {
@@ -1391,10 +1543,14 @@ fn test_balance_on_multiple_votes() {
 
     for n in 0..min_subnet_nodes {
       let votes_balance = VotesBalance::<Test>::get(proposal_index, account(n));
-      assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT*2);
-
       let reserve_balance: BalanceOf<Test> = <pallet_balances::Pallet<Test> as ReservableCurrency<AccountId>>::reserved_balance(&account(n));
-      assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT*2);
+      if n == 0 {
+        assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT*2);
+        assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT*2+model_initialization_cost);
+      } else {
+        assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT*2);
+        assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT*2);
+      }
     }
 
     for n in 0..min_subnet_nodes {
@@ -1412,10 +1568,14 @@ fn test_balance_on_multiple_votes() {
 
     for n in 0..min_subnet_nodes {
       let votes_balance = VotesBalance::<Test>::get(proposal_index, account(n));
-      assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT*3);
-
       let reserve_balance: BalanceOf<Test> = <pallet_balances::Pallet<Test> as ReservableCurrency<AccountId>>::reserved_balance(&account(n));
-      assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT*3);
+      if n == 0 {
+        assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT*3);
+        assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT*3+model_initialization_cost);
+      } else {
+        assert_eq!(votes_balance, DEFAUT_VOTE_AMOUNT*3);
+        assert_eq!(reserve_balance, DEFAUT_VOTE_AMOUNT*3);
+      }
     }
   })
 }

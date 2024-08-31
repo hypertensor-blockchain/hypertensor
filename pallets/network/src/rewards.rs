@@ -31,7 +31,8 @@ impl<T: Config> Pallet<T> {
     let subnet_reward: u128 = Self::percent_mul(base_subnet_reward, delegate_stake_rewards_percentage);
     let delegate_stake_reward: u128 = base_subnet_reward.saturating_sub(subnet_reward);
 
-    for (subnet_id, _) in SubnetsData::<T>::iter() {
+    for (subnet_id, data) in SubnetsData::<T>::iter() {
+      let min_nodes = data.min_nodes;
       // --- We don't check for minimum nodes because nodes cannot validate or attest if they are not met
       if let Ok(submission) = SubnetRewardsSubmission::<T>::try_get(subnet_id, epoch) {
         let data_len = submission.data.len();
@@ -40,15 +41,17 @@ impl<T: Config> Pallet<T> {
         let attestation_percentage: u128 = Self::percent_div(submission_attestations, submission_nodes_count);
         let validator: T::AccountId = submission.validator;
 
-        // --- If validator submitted no data, we assume the subnet is broken
+        // --- If validator submitted no data, or less than the minimum required subnet nodes 
+        //     we assume the subnet is broken
         // There is no slashing if subnet is broken, only risk of subnet being removed
-        if data_len == 0 {
+        if (data_len as u32) < min_nodes {
           // --- Increase the penalty count for the subnet
+          // If the subnet is broken, the validator can avoid slashing by submitting consensus with null data
           SubnetPenaltyCount::<T>::mutate(subnet_id, |n: &mut u32| *n += 1);
 
           // --- If subnet nodes aren't in consensus this is true
           // Since we can assume the subnet is in a broken state, we don't slash the validator
-          // even if others do not attest to this state
+          // even if others do not attest to this state???
 
           // --- If the subnet nodes are not in agreement with the validator that the model is broken, we
           //     increase the penalty score for the validator
@@ -73,12 +76,12 @@ impl<T: Config> Pallet<T> {
           let peer_id: PeerId = subnet_node.peer_id;
 
           let mut validated: bool = false;
-          let mut data: SubnetNodeData = SubnetNodeData::default();
+          let mut subnet_node_data: SubnetNodeData = SubnetNodeData::default();
           // test copying submission.data and removing found peers to limit future iterations
           for submission_data in submission.data.iter() {
             if submission_data.peer_id == peer_id {
               validated = true;
-              data = SubnetNodeData {
+              subnet_node_data = SubnetNodeData {
                 peer_id: peer_id,
                 score: submission_data.score,
               };
@@ -86,7 +89,7 @@ impl<T: Config> Pallet<T> {
             }
           }
     
-          // --- If not validated, then remove them if above required consensus
+          // --- If not validated, then remove them if consensus is reached and sequential absence threshold is reached
           if !validated {
             // --- To be removed or increase absent count, the consensus threshold must be reached
             if attestation_percentage > node_removal_threshold {
@@ -98,7 +101,7 @@ impl<T: Config> Pallet<T> {
               SequentialAbsentSubnetNode::<T>::insert(subnet_id, account_id.clone(), absent_count + 1);
 
               // --- Ensure maximum sequential removal consensus threshold is reached
-              if absent_count > max_absent {
+              if absent_count + 1 > max_absent {
                 Self::do_remove_subnet_node(block, subnet_id, account_id.clone());
               }
             }
@@ -106,7 +109,9 @@ impl<T: Config> Pallet<T> {
           }
 
           // --- If not attested, do not receive rewards
-          // --- Increase account penalty score
+          // --- Increase account penalty score???
+          // We don't penalize accounts for not attesting data in case data is corrupted
+          // It is up to subnet nodes to remove them via consensus
           if !submission.attests.contains(&account_id) {
             continue
           }
@@ -115,7 +120,7 @@ impl<T: Config> Pallet<T> {
           SequentialAbsentSubnetNode::<T>::mutate(subnet_id, account_id.clone(), |n: &mut u32| n.saturating_dec());
 
           // --- Calculate score percentage of peer versus sum
-          let score_percentage: u128 = Self::percent_div(data.score, sum as u128);
+          let score_percentage: u128 = Self::percent_div(subnet_node_data.score, sum as u128);
           // --- Calculate score percentage of total subnet rewards
           let mut account_reward: u128 = Self::percent_mul(score_percentage, subnet_reward);
 
@@ -145,6 +150,7 @@ impl<T: Config> Pallet<T> {
         // --- Increment down subnet penalty score on successful epochs
         SubnetPenaltyCount::<T>::mutate(subnet_id, |n: &mut u32| n.saturating_dec());
       } else if let Ok(rewards_validator) = SubnetRewardsValidator::<T>::try_get(subnet_id, epoch) {
+        // --- If there is no submission but validator chosen, increase penalty on subnet and validator
         // --- Increase the penalty count for the subnet
         // The next validator on the next epoch can increment the penalty score down
         SubnetPenaltyCount::<T>::mutate(subnet_id, |n: &mut u32| *n += 1);
@@ -153,92 +159,8 @@ impl<T: Config> Pallet<T> {
         // Even if a subnet is in a broken state, the chosen validator must submit blank data
         Self::slash_validator(subnet_id, rewards_validator, 0);
       }
+      // Testing only
+      log::info!("SubnetPenaltyCount: {:?}", SubnetPenaltyCount::<T>::get(subnet_id));
     }
-  }
-
-  // pub fn reward_subnets_v1(block: u64, epoch: u32, epoch_length: u64) {
-  //   let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
-  //   // --- Get total per subnet rewards
-  //   // Each subnet nodes rewards are based on the target stake even if previously slashed
-  //   let base_subnet_reward: u128 = BaseSubnetReward::<T>::get();
-  //   let delegate_stake_rewards_percentage: u128 = DelegateStakeRewardsPercentage::<T>::get();
-
-  //   let subnet_reward: u128 = Self::percent_mul(base_subnet_reward, delegate_stake_rewards_percentage);
-  //   let delegate_stake_reward: u128 = base_subnet_reward.saturating_sub(subnet_reward);
-
-  //   for (subnet_id, _) in SubnetsData::<T>::iter() {
-  //     if let Ok(submission) = SubnetRewardsSubmission::<T>::try_get(subnet_id, epoch) {
-  //       let submission_nodes_count: u128 = submission.nodes_count as u128;
-  //       let submission_attestations: u128 = submission.attests.len() as u128;
-  //       let attestation_percentage: u128 = Self::percent_div(submission_attestations, submission_nodes_count);
-  //       let validator: T::AccountId = submission.validator;
-  //       if MinAttestationPercentage::<T>::get() > attestation_percentage {
-  //         // --- Slash validator
-  //         Self::slash_validator(subnet_id, validator);
-
-  //         // --- Attestation not successful, move on to next subnet
-  //         continue
-  //       }
-
-  //       // --- Portion of delegate staking
-  //       Self::increase_delegated_stake(
-  //         subnet_id,
-  //         delegate_stake_reward,
-  //       );
-
-  //       // --- Reward peers
-  //       let sum: u128 = submission.sum;
-  //       let mut rewarded: BTreeSet<T::AccountId> = BTreeSet::new();
-  //       for data in submission.data.iter() {
-  //         // --- Iterate each subnet account and give rewards if in data and attested
-  //         if let Ok(account_id) = SubnetNodeAccount::<T>::try_get(subnet_id, data.clone().peer_id) {
-  //           // --- Ensure peer is eligible for rewards by checking if they attested
-  //           // In order to receive rewards, each peer must attest
-  //           // Only submit-eligible nodes can attest the epoch so we don't check for eligibility here
-  //           if !submission.attests.contains(&account_id) {
-  //             continue
-  //           }
-
-  //           // --- Ensure no duplicates are submitted
-  //           // Data uses dedup_by(|a, b| a.peer_id == b.peer_id) - this is redundant
-  //           if !rewarded.insert(account_id.clone()) {
-  //             continue
-  //           }
-
-  //           // --- Calculate score percentage of peer versus sum
-  //           let score_percentage: u128 = Self::percent_div(data.clone().score, sum as u128);
-  //           // --- Calculate score percentage of total subnet rewards
-  //           let mut account_rewards: u128 = Self::percent_mul(score_percentage, subnet_reward);
-
-  //           if account_id == validator {
-  //             account_rewards += Self::get_validator_reward(
-  //               submission_nodes_count as u32,
-  //               submission_attestations as u32
-  //             );    
-  //           }
-
-  //           // --- Skip if no rewards to give
-  //           if account_rewards == 0 {
-  //             continue;
-  //           }
-
-  //           // --- Increase account stake and emit event
-  //           Self::increase_account_stake(
-  //             &account_id,
-  //             subnet_id, 
-  //             account_rewards,
-  //           ); 
-  //         }
-  //       }
-  //     } else if let Ok(rewards_validator) = SubnetRewardsValidator::<T>::try_get(subnet_id, epoch) {
-  //       // If validator didn't submit anything, then slash
-  //       // Even if a subnet is in a broken state, the chosen validator must submit blank data
-  //       Self::slash_validator(subnet_id, rewards_validator);
-  //     }
-  //   }
-  // }
-
-  pub fn reward_subnet_nodes(subnet_id: u32) {
-
   }
 }

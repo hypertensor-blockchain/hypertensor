@@ -10,5 +10,6 @@ sp_api::decl_runtime_apis! {
     fn get_subnet_nodes_model_unconfirmed_count(model_id: u32) -> u32;
     fn get_consensus_data(model_id: u32, epoch: u32) -> Vec<u8>;
     fn get_accountant_data(model_id: u32, id: u32) -> Vec<u8>;
+    fn get_minimum_subnet_nodes(subnet_id: u32, memory_mb: u128) -> u32;
   }
 }

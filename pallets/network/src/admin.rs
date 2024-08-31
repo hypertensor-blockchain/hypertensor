@@ -24,7 +24,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::SubnetNotExist
     );
     
-		SubnetActivated::<T>::insert(path.clone(), true);
+		// SubnetActivated::<T>::insert(path.clone(), true);
 
     Self::deposit_event(Event::SetVoteSubnetIn(path));
 
@@ -38,7 +38,7 @@ impl<T: Config> Pallet<T> {
       Error::<T>::SubnetNotExist
     );
 
-		SubnetActivated::<T>::insert(path.clone(), false);
+		// SubnetActivated::<T>::insert(path.clone(), false);
 
     Self::deposit_event(Event::SetVoteSubnetOut(path));
 

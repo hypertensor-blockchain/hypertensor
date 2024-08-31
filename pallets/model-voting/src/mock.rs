@@ -18,6 +18,7 @@ use crate as pallet_model_voting;
 use frame_support::{
   parameter_types,
   traits::Everything,
+  PalletId
 };
 use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256, U256};
@@ -37,6 +38,7 @@ frame_support::construct_runtime!(
 	pub enum Test
 	{
     System: system,
+    InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
     Balances: pallet_balances,
     Network: pallet_network,
     SubnetVoting: pallet_model_voting,
@@ -80,6 +82,8 @@ pub const YEAR: BlockNumber = DAYS * 365;
 pub const SECS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1000;
 
 pub const EXISTENTIAL_DEPOSIT: u128 = 500;
+
+impl pallet_insecure_randomness_collective_flip::Config for Test {}
 
 impl pallet_balances::Config for Test {
   type Balance = Balance;
@@ -127,6 +131,8 @@ impl system::Config for Test {
 
 parameter_types! {
 	pub const EpochLength: u64 = 100;
+  pub const NetworkPalletId: PalletId = PalletId(*b"/network");
+  pub const SubnetInitializationCost: u128 = 100_000_000_000_000_000_000;
 }
 
 impl pallet_network::Config for Test {
@@ -140,11 +146,15 @@ impl pallet_network::Config for Test {
 	type Year = ConstU64<{ YEAR as u64 }>;
   type OffchainSignature = Signature;
 	type OffchainPublic = AccountPublic;
+  type Randomness = InsecureRandomnessCollectiveFlip;
+	type PalletId = NetworkPalletId;
+  type SubnetInitializationCost = SubnetInitializationCost;
 }
 
 parameter_types! {
 	pub const VotingPeriod: BlockNumber = DAYS * 21;
 	pub const EnactmentPeriod: BlockNumber = DAYS * 7;
+  pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
 }
 
 impl Config for Test {
@@ -157,6 +167,7 @@ impl Config for Test {
 	type MaxProposals = ConstU32<32>;
 	type VotingPeriod = VotingPeriod;
 	type EnactmentPeriod = EnactmentPeriod;
+  type MinProposalStake = MinProposalStake; // 100 * 1e18
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

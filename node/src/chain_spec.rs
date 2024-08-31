@@ -116,6 +116,22 @@ fn peer(id: u8) -> OpaquePeerId {
 
 pub fn development_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+	let mut accounts = (0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>();
+	let default_accounts = vec![
+		get_account_id_from_seed::<sr25519::Public>("Alice"),
+		get_account_id_from_seed::<sr25519::Public>("Bob"),
+		get_account_id_from_seed::<sr25519::Public>("Charlie"),
+		get_account_id_from_seed::<sr25519::Public>("Dave"),
+		get_account_id_from_seed::<sr25519::Public>("Eve"),
+		get_account_id_from_seed::<sr25519::Public>("Ferdie"),
+		get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
+	];
+	accounts.extend(default_accounts);
 
 	Ok(ChainSpec::from_genesis(
 		// Name
@@ -131,7 +147,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
-				(0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>(),
+				accounts.clone(),
+				// (0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>(),
 				// vec![
 				// 	get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// 	get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -164,6 +181,22 @@ pub fn development_config() -> Result<ChainSpec, String> {
 
 pub fn local_testnet_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+	let mut accounts = (0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>();
+	let default_accounts = vec![
+		get_account_id_from_seed::<sr25519::Public>("Alice"),
+		get_account_id_from_seed::<sr25519::Public>("Bob"),
+		get_account_id_from_seed::<sr25519::Public>("Charlie"),
+		get_account_id_from_seed::<sr25519::Public>("Dave"),
+		get_account_id_from_seed::<sr25519::Public>("Eve"),
+		get_account_id_from_seed::<sr25519::Public>("Ferdie"),
+		get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
+		get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
+	];
+	accounts.extend(default_accounts);
 
 	Ok(ChainSpec::from_genesis(
 		// Name
@@ -179,7 +212,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
-				(0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>(),
+				accounts.clone(),
+				// (0..90).map(|x| get_account_id_from_seed::<sr25519::Public>(&x.to_string())).collect::<Vec<_>>(),
 				// vec![
 				// 	get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// 	get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -291,15 +325,13 @@ fn testnet_genesis(
 		network: {
 			let mut peer_index: u8 = 0;
 			NetworkConfig {
-			subnet_path: "bigscience/bloom-560m".into(),
+			subnet_path: "petals-team/StableBeluga2".into(),
 			subnet_nodes: endowed_accounts.iter().cloned().map(|k| {
 				peer_index += 1;
 				(
 					k, 
-					"bigscience/bloom-560m".into(),
+					"petals-team/StableBeluga2".into(),
 					peer(peer_index),
-					"172.20.54.234".into(),
-					8888,
 				)
 			}).collect(),
 			accounts: endowed_accounts.iter().cloned().map(|k| k).collect(),

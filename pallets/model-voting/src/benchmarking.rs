@@ -18,6 +18,8 @@
 // Executed Command:
 // ./target/release/node-template benchmark pallet --chain=dev --wasm-execution=compiled --pallet=pallet_model_voting --extrinsic=* --steps=50 --repeat=20 --output="pallets/model-voting/src/weights.rs" --template ./.maintain/frame-weight-template.hbs
 
+// ./target/release/node-template benchmark pallet --chain=dev --wasm-execution=compiled --pallet=pallet_model_voting --extrinsic=* --steps=5 --repeat=2 --output="pallets/model-voting/src/weights.rs" --template ./.maintain/frame-weight-template.hbs
+
 use super::*;
 use frame_benchmarking::{account, benchmarks, whitelist_account, BenchmarkError};
 use frame_support::{
@@ -28,7 +30,7 @@ use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
 use crate::Pallet as SubnetVoting;
 use crate::{
   SubnetNode, PropsType, SubnetVote, VotesBalance, ReservableCurrency, PropCount, VoteType,
-  Votes, ActiveProposals, Proposals, PropsStatus, Quorum
+  Votes, ActiveProposals, Proposals, PropsStatus, Quorum, PreSubnetData
 };
 use frame_support::dispatch::Vec;
 use scale_info::prelude::{vec, format};
@@ -56,8 +58,22 @@ fn default_ip() -> Vec<u8> {
   DEFAULT_IP.into()
 }
 
+fn default_add_subnet_data() -> PreSubnetData {
+  let subnet_data = PreSubnetData {
+    path: DEFAULT_MODEL_PATH.into(),
+		memory_mb: 50000,
+  };
+  subnet_data
+}
+
 pub fn u64_to_block<T: frame_system::Config>(input: u64) -> BlockNumberFor<T> {
 	input.try_into().ok().expect("REASON")
+}
+
+pub fn get_current_block_as_u64<T: frame_system::Config>() -> u64 {
+	TryInto::try_into(<frame_system::Pallet<T>>::block_number())
+		.ok()
+		.expect("blockchain will not exceed 2^64 blocks; QED.")
 }
 
 pub fn block_to_u64<T: frame_system::Config>(input: BlockNumberFor<T>) -> u64 {
@@ -79,8 +95,6 @@ fn build_subnet_nodes<T: Config>(start: u32, end: u32, deposit_amount: u128) -> 
     let subnet_node = SubnetNode {
       account_id: funded_account::<T>("voter", n),
       peer_id: peer(n),
-      ip: default_ip(),
-      port: DEFAULT_PORT,
     };
     subnet_nodes.push(subnet_node);
   }
@@ -167,7 +181,7 @@ fn build_propose_activate<T: Config>(path: Vec<u8>, start: u32, end: u32, deposi
   assert_ok!(
     SubnetVoting::<T>::propose(
       RawOrigin::Signed(proposer.clone()).into(),
-      default_model_path(), 
+      default_add_subnet_data(), 
       subnet_nodes,
       PropsType::Activate,
     )
@@ -194,10 +208,10 @@ benchmarks! {
   propose {
     let prop_count = PropCount::<T>::get();
     let min_stake = T::SubnetVote::get_min_stake_balance();
-    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes(1000);
 		let proposer = funded_account::<T>("account", 0);
     let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
-	}: propose(RawOrigin::Signed(proposer.clone()), default_model_path(), subnet_nodes, PropsType::Activate)
+	}: propose(RawOrigin::Signed(proposer.clone()), default_add_subnet_data(), subnet_nodes, PropsType::Activate)
 	verify {
     assert_eq!(1, 1);
 		post_success_proposal_activate_ensures::<T>(
@@ -211,7 +225,7 @@ benchmarks! {
   cast_vote {
     let prop_count = PropCount::<T>::get();
     let min_stake = T::SubnetVote::get_min_stake_balance();
-    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes(1000);
 		let voter = funded_account::<T>("voter", 0);
     let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
     let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
@@ -224,11 +238,17 @@ benchmarks! {
   execute {
     let prop_count = PropCount::<T>::get();
     let min_stake = T::SubnetVote::get_min_stake_balance();
-    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes(1000);
 		let voter = funded_account::<T>("voter", 0);
     let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
     let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
     build_cast_vote::<T>(proposal_index, 0, min_subnet_nodes, VoteType::Yay);
+
+    let proposal = Proposals::<T>::get(proposal_index);
+
+    let current_block_number = get_current_block_as_u64::<T>();
+    frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(current_block_number + proposal.max_block + 1));
+
 	}: execute(RawOrigin::Signed(voter.clone()), proposal_index)
 	verify {
     assert_eq!(1, 1);
@@ -237,11 +257,12 @@ benchmarks! {
   cancel_proposal {
     let prop_count = PropCount::<T>::get();
     let min_stake = T::SubnetVote::get_min_stake_balance();
-    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes(1000);
 		let voter = funded_account::<T>("voter", 0);
     let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
+    let proposer = funded_account::<T>("account", 0);
     let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
-	}: cancel_proposal(RawOrigin::Signed(voter.clone()), proposal_index)
+	}: cancel_proposal(RawOrigin::Signed(proposer), proposal_index)
 	verify {
     assert_eq!(1, 1);
   }
@@ -249,10 +270,33 @@ benchmarks! {
   unreserve {
     let prop_count = PropCount::<T>::get();
     let min_stake = T::SubnetVote::get_min_stake_balance();
-    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes();
+    let min_subnet_nodes: u32 = T::SubnetVote::get_min_subnet_nodes(1000);
 		let voter = funded_account::<T>("voter", 0);
     let subnet_nodes = build_subnet_nodes::<T>(0, min_subnet_nodes, min_stake);
     let proposal_index = build_propose_activate::<T>(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
+
+    let proposal = Proposals::<T>::get(proposal_index);
+
+    assert_ok!(
+      SubnetVoting::<T>::cast_vote(
+        RawOrigin::Signed(voter.clone()).into(), 
+        proposal_index, 
+        DEFAUT_VOTE_AMOUNT.try_into().ok().expect("REASON"), 
+        VoteType::Yay      
+      )
+    );
+
+    let current_block_number = get_current_block_as_u64::<T>();
+    frame_system::Pallet::<T>::set_block_number(u64_to_block::<T>(current_block_number + proposal.max_block + 1));
+
+    // Execute proposal
+    assert_ok!(
+      SubnetVoting::<T>::execute(
+        RawOrigin::Signed(voter.clone()).into(),
+        proposal_index
+      )
+    );
+  
 	}: unreserve(RawOrigin::Signed(voter.clone()), proposal_index)
 	verify {
     assert_eq!(1, 1);
