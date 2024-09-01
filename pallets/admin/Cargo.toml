@@ -25,7 +25,7 @@ pallet-sudo = { version = "4.0.0-dev", default-features = false, git = "https://
 pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
 
 pallet-network = { version = "4.0.0-dev", default-features = false, path = "../network" }
-pallet-model-voting = { version = "4.0.0-dev", default-features = false, path = "../model-voting" }
+pallet-subnet-democracy = { version = "4.0.0-dev", default-features = false, path = "../subnet-democracy" }
 
 # Randomness
 pallet-insecure-randomness-collective-flip = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v1.0.0" }
@@ -44,7 +44,7 @@ std = [
 	"frame-system/std",
 	"scale-info/std",
 	"pallet-network/std",
-	"pallet-model-voting/std",
+	"pallet-subnet-democracy/std",
 	"pallet-sudo/std",
 	"pallet-insecure-randomness-collective-flip/std",
 ]

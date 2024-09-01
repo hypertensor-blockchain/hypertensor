@@ -22,7 +22,7 @@ impl<T: Config> Pallet<T> {
     let max_absent = MaxSequentialAbsentSubnetNode::<T>::get();
 
     let node_removal_threshold = NodeAgainstConsensusRemovalThreshold::<T>::get();
-    let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
+    
     // --- Get total per subnet rewards
     // Each subnet nodes rewards are based on the target stake even if previously slashed
     let base_subnet_reward: u128 = BaseSubnetReward::<T>::get();
@@ -159,8 +159,8 @@ impl<T: Config> Pallet<T> {
         // Even if a subnet is in a broken state, the chosen validator must submit blank data
         Self::slash_validator(subnet_id, rewards_validator, 0);
       }
-      // Testing only
-      log::info!("SubnetPenaltyCount: {:?}", SubnetPenaltyCount::<T>::get(subnet_id));
+
+      // TODO: Automatically remove subnet if greater than max penalties count
     }
   }
 }

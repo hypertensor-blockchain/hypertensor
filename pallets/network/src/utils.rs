@@ -278,24 +278,6 @@ impl<T: Config> Pallet<T> {
   }
 
   pub fn get_model_initialization_cost(block: u64) -> u128 {
-    // let mut subnet_nodes_included_count: u128 = 0;
-    // let epoch_length: u64 = T::EpochLength::get();
-    // let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
-
-    // for subnet_node in SubnetNodesData::<T>::iter_values() {
-    //   let is_included: bool = block >= Self::get_eligible_epoch_block(
-    //     epoch_length, 
-    //     subnet_node.initialized, 
-    //     min_required_consensus_inclusion_epochs
-    //   );
-
-    //   if is_included {
-    //     subnet_nodes_included_count += 1;
-    //   }
-    // }
-
-    // let init_cost = SubnetPerNodeInitCost::<T>::get();
-    // subnet_nodes_included_count * init_cost
     T::SubnetInitializationCost::get()
   }
 
@@ -443,8 +425,6 @@ impl<T: Config> Pallet<T> {
         node_sets.retain(|k, _| *k != account_id.clone());
         SubnetNodesClasses::<T>::insert(subnet_id, class_id, node_sets);
       }
-
-      log::info!("Removed subnet peer AccountId {:?} from subnet ID {:?}", account_id.clone(), subnet_id);
 
       Self::deposit_event(
         Event::SubnetNodeRemoved { 
@@ -673,8 +653,6 @@ impl<T: Config> Pallet<T> {
           continue;
         }
         
-        log::error!("node_sets.len() {:?}", node_sets.len());
-
         // --- Get next class to shift into
         let class_index = class_id.index();
 
@@ -728,16 +706,6 @@ impl<T: Config> Pallet<T> {
   pub fn do_choose_validator_and_accountants(block: u64, epoch: u32, epoch_length: u64) {
     let min_required_model_consensus_submit_epochs = MinRequiredSubnetConsensusSubmitEpochs::<T>::get();
     let target_accountants_len: u32 = TargetAccountantsLength::<T>::get();
-
-    // let mut validator_small_rng = SmallRng::seed_from_u64(block);
-
-    // --- Ensure randomization isn't using the same seed
-    // let mut accountants_small_rng = SmallRng::seed_from_u64(block + 1);
-
-    // let generate_random_number = Self::generate_random_number(block as u32);
-    // let get_random_number = Self::get_random_number(100, block as u32);
-    // log::error!("do_choose_validator_and_accountants generate_random_number {:?}", generate_random_number);
-    // log::info!("do_choose_validator_and_accountants get_random_number {:?}", get_random_number);
 
     for (subnet_id, data) in SubnetsData::<T>::iter() {
       let min_subnet_nodes = data.min_nodes;

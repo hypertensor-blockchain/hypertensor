@@ -109,9 +109,9 @@ impl<T: Config> Pallet<T> {
     }
   
     // --- Ensure that we can conver this u128 to a balance.
-    let stake_to_be_added_as_currency = Self::u128_to_balance(stake_to_be_removed);
+    let stake_to_be_removed_as_currency = Self::u128_to_balance(stake_to_be_removed);
     ensure!(
-        stake_to_be_added_as_currency.is_some(),
+      stake_to_be_removed_as_currency.is_some(),
         Error::<T>::CouldNotConvertToBalance
     );
 
@@ -134,7 +134,7 @@ impl<T: Config> Pallet<T> {
     }
 
     // --- 9. We add the balancer to the account_id.  If the above fails we will not credit this account_id.
-    Self::add_balance_to_coldkey_account(&account_id, stake_to_be_added_as_currency.unwrap());
+    Self::add_balance_to_coldkey_account(&account_id, stake_to_be_removed_as_currency.unwrap());
     
     // Set last block for rate limiting
     Self::set_last_tx_block(&account_id, block);

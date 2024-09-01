@@ -17,51 +17,9 @@ impl<T: Config> Pallet<T> {
     subnet_nodes
   }
 
-  // pub fn get_subnet_nodes_included(
-  //   subnet_id: u32,
-  // ) -> Vec<SubnetNode<T::AccountId>> {
-  //   if !SubnetsData::<T>::contains_key(subnet_id.clone()) {
-  //     return Vec::new();
-  //   }
-
-  //   let block: u64 = Self::get_current_block_as_u64();
-  //   let epoch_length: u64 = T::EpochLength::get();
-  //   let min_required_epochs: u64 = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
-
-  //   let mut subnet_nodes: Vec<SubnetNode<T::AccountId>> = Vec::new();
-
-  //   for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
-  //     let account_id: T::AccountId = subnet_node.clone().account_id;
-
-  //     let account_eligible: bool = Self::is_account_eligible(account_id);
-
-  //     if !account_eligible {
-  //       continue
-  //     }
-
-  //     let initialized: u64 = subnet_node.clone().initialized;
-
-  //     let do_include: bool = block >= Self::get_eligible_epoch_block(
-  //       epoch_length, 
-  //       initialized, 
-  //       min_required_epochs
-  //     );
-
-  //     if !do_include {
-  //       continue
-  //     }
-
-  //     subnet_nodes.push(subnet_node);
-  //   }
-  //   subnet_nodes
-  // }
-
   pub fn get_subnet_nodes_included(
     subnet_id: u32,
   ) -> Vec<SubnetNode<T::AccountId>> {
-    log::info!("get_subnet_nodes_included");
-    log::error!("get_subnet_nodes_included");
-
     if !SubnetsData::<T>::contains_key(subnet_id.clone()) {
       return Vec::new();
     }
@@ -72,10 +30,8 @@ impl<T: Config> Pallet<T> {
 
     for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
       let account_id: T::AccountId = subnet_node.clone().account_id;
-      log::error!("get_subnet_nodes_included account_id {:?}", account_id);
 
       let account_eligible: bool = Self::is_account_eligible(account_id.clone());
-      log::error!("get_subnet_nodes_included account_eligible {:?}", account_eligible);
 
       if !account_eligible {
         continue
@@ -136,45 +92,6 @@ impl<T: Config> Pallet<T> {
     }
     subnet_nodes
   }
-
-  // pub fn get_subnet_nodes_submittable(
-  //   subnet_id: u32,
-  // ) -> Vec<SubnetNode<T::AccountId>> {
-  //   if !SubnetsData::<T>::contains_key(subnet_id.clone()) {
-  //     return Vec::new();
-  //   }
-
-  //   let block: u64 = Self::get_current_block_as_u64();
-  //   let epoch_length: u64 = T::EpochLength::get();
-  //   let min_required_epochs: u64 = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
-
-  //   let mut subnet_nodes: Vec<SubnetNode<T::AccountId>> = Vec::new();
-
-  //   for subnet_node in SubnetNodesData::<T>::iter_prefix_values(subnet_id.clone()) {
-  //     let account_id: T::AccountId = subnet_node.clone().account_id;
-
-  //     let account_eligible: bool = Self::is_account_eligible(account_id);
-
-  //     if !account_eligible {
-  //       continue
-  //     }
-
-  //     let initialized: u64 = subnet_node.clone().initialized;
-
-  //     let do_include: bool = block >= Self::get_eligible_epoch_block(
-  //       epoch_length, 
-  //       initialized, 
-  //       min_required_epochs
-  //     );
-
-  //     if !do_include {
-  //       continue
-  //     }
-
-  //     subnet_nodes.push(subnet_node);
-  //   }
-  //   subnet_nodes
-  // }
 
   pub fn get_subnet_nodes_model_unconfirmed_count(
     subnet_id: u32,

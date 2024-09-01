@@ -26,6 +26,7 @@ use sp_core::OpaquePeerId as PeerId;
 use crate::{
   Error, SubnetNode, PropsType, SubnetVote, VotesBalance, ReservableCurrency, PropCount, VoteType,
   Votes, ActiveProposals, Proposals, PropsStatus, Quorum, PropsPathStatus, BalanceOf, PreSubnetData,
+  ActivateProposals,
 };
 type AccountIdOf<Test> = <Test as frame_system::Config>::AccountId;
 
@@ -403,7 +404,8 @@ fn build_propose_activate(path: Vec<u8>, start: u32, end: u32, deposit_amount: u
       PropsType::Activate,
     )
   );
-  0
+  let proposal_index = PropCount::<Test>::get();
+  return proposal_index - 1
 }
 
 
@@ -472,12 +474,15 @@ fn test_propose_activate() {
       )
     );
 
+    let activate_proposals = ActivateProposals::<Test>::get();
+    log::error!("activate_proposals {:?}", activate_proposals);
+    assert_eq!(activate_proposals, 1);
     post_success_proposal_activate_ensures(default_add_subnet_data().path, prop_count, 0, System::block_number());
   })
 }
 
 #[test]
-fn test_propose_activate_duplicat_nodes() {
+fn test_propose_activate_duplicate_nodes() {
   new_test_ext().execute_with(|| {
     let prop_count = PropCount::<Test>::get();
 
@@ -962,6 +967,110 @@ fn test_execute_activate_succeeded() {
     post_activate_execute_succeeded_ensures(proposal_index, DEFAULT_MODEL_PATH.into());
 
     post_proposal_conclusion_unreserves(proposal_index, 0, min_subnet_nodes, DEFAUT_VOTE_AMOUNT);
+  })
+}
+
+#[test]
+fn test_execute_activate_succeeded_reexecute() {
+  new_test_ext().execute_with(|| {
+    // Should allow max activate proposals after execute()
+    for n in 1..2 {
+      let prop_count = PropCount::<Test>::get();
+      let min_subnet_nodes = get_default_min_subnet_nodes();
+  
+      let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
+      
+      let activate_proposals = ActivateProposals::<Test>::get();
+      assert_eq!(activate_proposals, 1);
+  
+      for n in 0..min_subnet_nodes {
+        let _ = Balances::deposit_creating(&account(n), DEFAUT_VOTE_AMOUNT);
+    
+        assert_ok!(
+          SubnetVoting::cast_vote(
+            RuntimeOrigin::signed(account(n)),
+            proposal_index,
+            DEFAUT_VOTE_AMOUNT,
+            VoteType::Yay,
+          )
+        );
+        post_cast_vote_ensures(proposal_index, n);
+      }
+  
+      let voting_period = VotingPeriod::get();
+      System::set_block_number(System::block_number() + voting_period + 1);
+  
+      assert_ok!(
+        SubnetVoting::execute(
+          RuntimeOrigin::signed(account(0)),
+          proposal_index,
+        )
+      );
+  
+      post_activate_execute_succeeded_ensures(proposal_index, DEFAULT_MODEL_PATH.into());
+  
+      post_proposal_conclusion_unreserves(proposal_index, 0, min_subnet_nodes, DEFAUT_VOTE_AMOUNT);  
+    }
+  })
+}
+
+#[test]
+fn test_execute_activate_succeeded_reexecute_expired_enactment() {
+  new_test_ext().execute_with(|| {
+    // Should allow max activate proposals after execute()
+    for p in 0..2 {
+      let prop_count = PropCount::<Test>::get();
+      let min_subnet_nodes = get_default_min_subnet_nodes();
+  
+      let proposal_index = build_propose_activate(DEFAULT_MODEL_PATH.into(), 0, min_subnet_nodes, DEFAULT_DEPOSIT_AMOUNT);
+      log::error!("test_execute_activate_succeeded_reexecute_expired_enactment proposal_index {:?}", proposal_index);
+      
+      let activate_proposals = ActivateProposals::<Test>::get();
+      assert_eq!(activate_proposals, 1);
+  
+      for n in 0..min_subnet_nodes {
+        let _ = Balances::deposit_creating(&account(n), DEFAUT_VOTE_AMOUNT);
+    
+        assert_ok!(
+          SubnetVoting::cast_vote(
+            RuntimeOrigin::signed(account(n)),
+            proposal_index,
+            DEFAUT_VOTE_AMOUNT,
+            VoteType::Yay,
+          )
+        );
+        post_cast_vote_ensures(proposal_index, n);
+      }
+  
+      let voting_period = VotingPeriod::get();
+  
+      let enactment_period = EnactmentPeriod::get();
+
+      System::set_block_number(System::block_number() + voting_period + enactment_period + 1);
+
+      assert_ok!(
+        SubnetVoting::execute(
+          RuntimeOrigin::signed(account(0)),
+          proposal_index,
+        )
+      );
+
+      let activate_proposals = ActivateProposals::<Test>::get();
+      assert_eq!(activate_proposals, 0);
+  
+      let proposal = Proposals::<Test>::get(proposal_index);
+      assert_eq!(proposal.proposal_type, PropsType::Activate);
+
+      let path: Vec<u8> = DEFAULT_MODEL_PATH.into();
+
+      let proposal_path_status = PropsPathStatus::<Test>::get(path.clone());
+      assert_eq!(proposal_path_status, PropsStatus::Expired);
+    
+      assert_eq!(proposal.proposal_status, PropsStatus::Expired);
+  
+      let is_active = pallet_network::SubnetActivated::<Test>::get(path);
+      assert_eq!(is_active.active, false);
+    }
   })
 }
 

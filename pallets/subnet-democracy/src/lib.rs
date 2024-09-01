@@ -287,10 +287,10 @@ pub mod pallet {
   #[pallet::type_value]
 	pub fn DefaultQuorum() -> u128 {
     // 10,000 * 1e18
-		10000000000000000000000
+		// 10000000000000000000000
 
     // 100 * 1e18 for testing
-    // 100000000000000000000
+    100000000000000000000
 	}
   #[pallet::type_value]
 	pub fn DefaultMajority() -> u128 {
@@ -646,6 +646,13 @@ pub mod pallet {
 
       // --- We made it past the voting period, we cannot fail from here
 
+      if proposal.proposal_type == PropsType::Activate {
+        ActivateProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
+      } else {
+        DeactivateProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
+      }
+      
+
       // --- If enactment period has passed, expire the proposal
       // Don't revert here to allow expired paths to be reproposed
       if block > max_block + Self::convert_block_as_u64(T::EnactmentPeriod::get())  {
@@ -660,16 +667,13 @@ pub mod pallet {
       let quorum_reached = Self::quorum_reached(votes.clone());
       let vote_succeeded = Self::vote_succeeded(votes.clone());
 
-      log::error!("quorum_reached {:?}", quorum_reached);
-      log::error!("vote_succeeded {:?}", vote_succeeded);
-
       let proposer_stake_as_balance = Self::u128_to_balance(proposal.proposer_stake);
       // --- Unreserve here to pay for initialization fee or give back to proposer
       T::Currency::unreserve(
         &proposal.proposer,
         proposer_stake_as_balance.unwrap(),
       );
-    
+
       // --- If quorum and vote YAYS aren greater than vote NAYS, then pass, else, defeat
       if quorum_reached && vote_succeeded {
         // Self::try_succeed(account_id, proposal.proposer, proposal_index, proposal.proposal_type, proposal.subnet_data.clone())
@@ -974,8 +978,6 @@ impl<T: Config> Pallet<T> {
       let peer_vote_premium = Perbill::from_rational(NodeVotePremium::<T>::get(), 100 as u128);
       let voting_power = balance.saturating_add(peer_vote_premium * balance);
    
-      log::error!("balance      {:?}", balance);
-      log::error!("voting_power {:?}", voting_power);
       return Self::balance_to_u128(voting_power)
     }
 
@@ -999,61 +1001,19 @@ impl<T: Config> Pallet<T> {
     ActiveProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
 
     if proposal.proposal_type == PropsType::Activate {
-      ActivateProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
       Self::try_activate_model(activator, proposal.clone().proposer, proposal.clone().subnet_data);
-      // if proposal.proposer_stake > 0 {
-      //   let proposer_stake_as_balance = Self::u128_to_balance(proposal.proposer_stake);
-      //   T::Currency::unreserve(
-      //     &proposal.proposer,
-      //     proposer_stake_as_balance.unwrap(),
-      //   );  
-      // }
-      Proposals::<T>::mutate(
-        proposal_index,
-        |params: &mut PropsParams<T::AccountId>| {
-          params.proposer_stake = 0;
-        },
-      );
-
-      // // Unreserve the proposal amount to sent to Network pallet
-      // if let Ok(()) = Self::try_activate_model(activator, proposal.clone().proposer, proposal.clone().subnet_data) {
-      //   // The activation of the subnet slashes the proposers reserves
-      // } else {
-      //   // if the activation of the subnet fails, unreserve the proposers reserve
-      //   if proposal.proposer_stake > 0 {
-      //     T::Currency::unreserve(
-      //       &proposal.proposer,
-      //       proposer_stake_as_balance.unwrap(),
-      //     );  
-      //   }
-      // }
-      // // --- Mutate the proposer stake to 0
-      // Proposals::<T>::mutate(
-      //   proposal_index,
-      //   |params: &mut PropsParams<T::AccountId>| {
-      //     params.proposer_stake = 0;
-      //   },
-      // );
-      Ok(())
     } else {
-      DeactivateProposals::<T>::mutate(|n: &mut u32| n.saturating_dec());
       Self::try_deactivate_model(activator, proposal.clone().proposer, proposal.clone().subnet_data);
-      // if proposal.proposer_stake > 0 {
-      //   let proposer_stake_as_balance = Self::u128_to_balance(proposal.proposer_stake);
-      //   T::Currency::unreserve(
-      //     &proposal.proposer,
-      //     proposer_stake_as_balance.unwrap(),
-      //   );  
-      // }
-      Proposals::<T>::mutate(
-        proposal_index,
-        |params: &mut PropsParams<T::AccountId>| {
-          params.proposer_stake = 0;
-        },
-      );
-      Ok(())
-
     }
+
+    // --- Proposal stake unservered in the `execute`, update to reflect no reserves 
+    Proposals::<T>::mutate(
+      proposal_index,
+      |params: &mut PropsParams<T::AccountId>| {
+        params.proposer_stake = 0;
+      },
+    );
+    Ok(())
   }
 
   fn try_defeat(proposal_index: PropIndex, path: Vec<u8>) -> DispatchResult {
@@ -1110,9 +1070,6 @@ impl<T: Config> Pallet<T> {
   }
 
   fn vote_succeeded(votes: VotesParams) -> bool {
-    log::error!("vote_succeeded votes.yay {:?}", votes.yay);
-    log::error!("vote_succeeded votes.nay {:?}", votes.nay);
-
     votes.yay > votes.nay
   }
 

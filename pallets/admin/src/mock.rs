@@ -41,7 +41,7 @@ frame_support::construct_runtime!(
     InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
     Balances: pallet_balances,
     Network: pallet_network,
-    ModelVoting: pallet_model_voting,
+    SubnetDemocracy: pallet_subnet_democracy,
     Admin: pallet_admin,
 	}
 );
@@ -158,7 +158,7 @@ parameter_types! {
   pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
 }
 
-impl pallet_model_voting::Config for Test {
+impl pallet_subnet_democracy::Config for Test {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
 	type SubnetVote = Network;
@@ -174,7 +174,7 @@ impl pallet_model_voting::Config for Test {
 impl Config for Test {
 	type RuntimeEvent = RuntimeEvent;
   type NetworkAdminInterface = Network;
-  type SubnetVotingAdminInterface = ModelVoting;
+  type SubnetDemocracyAdminInterface = SubnetDemocracy;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

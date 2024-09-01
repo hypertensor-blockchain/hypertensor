@@ -45,7 +45,7 @@ pub mod pallet {
   use super::*;
   use frame_support::pallet_prelude::*;
   use pallet_network::AdminInterface as NetworkAdminInterface;
-  use pallet_model_voting::AdminInterface as SubnetVotingAdminInterface;
+  use pallet_subnet_democracy::AdminInterface as SubnetDemocracyAdminInterface;
 
   #[pallet::config]
   pub trait Config: frame_system::Config {
@@ -54,7 +54,7 @@ pub mod pallet {
 
     type NetworkAdminInterface: NetworkAdminInterface;
 
-    type SubnetVotingAdminInterface: SubnetVotingAdminInterface;
+    type SubnetDemocracyAdminInterface: SubnetDemocracyAdminInterface;
 
     // type WeightInfo: WeightInfo;
   }
@@ -241,14 +241,14 @@ pub mod pallet {
     #[pallet::weight(0)]
     pub fn set_peer_vote_premium(origin: OriginFor<T>, value: u128) -> DispatchResult {
       ensure_root(origin)?;
-      T::SubnetVotingAdminInterface::set_peer_vote_premium(value)
+      T::SubnetDemocracyAdminInterface::set_peer_vote_premium(value)
     }
 
     #[pallet::call_index(22)]
     #[pallet::weight(0)]
     pub fn set_quorum(origin: OriginFor<T>, value: u128) -> DispatchResult {
       ensure_root(origin)?;
-      T::SubnetVotingAdminInterface::set_quorum(value)
+      T::SubnetDemocracyAdminInterface::set_quorum(value)
     }
   }
 }

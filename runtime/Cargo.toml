@@ -71,7 +71,7 @@ pallet-authorship = { version = "4.0.0-dev", default-features = false, git = "ht
 pallet-rewards = { version = "4.0.0-dev", default-features = false, path = "../pallets/rewards" }
 
 # Conviction model voting
-pallet-model-voting = { version = "4.0.0-dev", default-features = false, path = "../pallets/model-voting" }
+pallet-subnet-democracy = { version = "4.0.0-dev", default-features = false, path = "../pallets/subnet-democracy" }
 
 
 sp-debug-derive = { git = "https://github.com/paritytech/substrate.git", default-features = false, features = [ "force-debug" ] }
@@ -106,7 +106,7 @@ std = [
 	"pallet-preimage/std",
 	"pallet-network/std",
 	"pallet-admin/std",
-	"pallet-model-voting/std",
+	"pallet-subnet-democracy/std",
 	"pallet-insecure-randomness-collective-flip/std",
 	"sp-api/std",
 	"sp-block-builder/std",
@@ -131,7 +131,7 @@ runtime-benchmarks = [
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-network/runtime-benchmarks",
-	"pallet-model-voting/runtime-benchmarks",
+	"pallet-subnet-democracy/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [

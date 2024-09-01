@@ -125,9 +125,6 @@ impl<T: Config> Pallet<T> {
 
     let account_delegate_stake_shares: u128 = AccountSubnetDelegateStakeShares::<T>::get(&account_id, subnet_id.clone());
 
-    log::error!("delegate_stake_shares_to_be_removed {:?}", delegate_stake_shares_to_be_removed);
-    log::error!("account_delegate_stake_shares       {:?}", account_delegate_stake_shares);
-
     // --- Ensure that the account has enough delegate_stake to withdraw.
     ensure!(
       account_delegate_stake_shares >= delegate_stake_shares_to_be_removed,
@@ -301,9 +298,6 @@ impl<T: Config> Pallet<T> {
     total_shares: u128,
     total_balance: u128
   ) -> u128 {
-    log::error!("convert_to_balance shares        {:?}", shares);
-    log::error!("convert_to_balance total_shares  {:?}", total_shares);
-    log::error!("convert_to_balance total_balance {:?}", total_balance);
     if total_shares == 0 {
       return shares;
     }
@@ -316,9 +310,6 @@ impl<T: Config> Pallet<T> {
     total_shares: u128,
     total_balance: u128
   ) -> u128 {
-    log::error!("convert_to_shares balance        {:?}", balance);
-    log::error!("convert_to_shares total_shares   {:?}", total_shares);
-    log::error!("convert_to_shares total_balance  {:?}", total_balance);
     if total_shares == 0 {
       return balance;
     }
