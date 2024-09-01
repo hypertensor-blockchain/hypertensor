@@ -29,13 +29,23 @@ impl<T: Config> Pallet<T> {
     epoch: u32,
     mut data: Vec<SubnetNodeData>,
   ) -> DispatchResult {
-    log::error!("epoch -> {:?}", epoch);
+    // TODO: Track how many nodes leave AFTER the validator submits their consensus data
+    // This allows us to measure the delta between attestation percentage versus validator data
+    // e.g. If there are 1000 validators and 100 leave on the block following, we know the max
+    // attestation percentage will only be 90%. We can alter the attestation percentage up to 100% based on
+    // the amount of nodes that left during the epoch following the validators entry.
+    //
+    // Each attestor will be able to track this to get an accurate measurement of the validators
+    // consensus data before attesting.
+    // e.g. If 1000 validators and 10 leaves, the attestors measurement of the validators consensus data will be
+    // accurate up to a maximum of 99.0%, we can calculate the delta between consensus datas accuracy at the current
+    // space in time, versus the accuracy including the validators that left afterwards. If 1 left, we can increase the
+    // attestation percentage up to 100% based on the amount of nodes that left during the epoch following the validators entry.
+    // We can also track not only the count, but who left for the greatest accuracy
+
     // --- Ensure current subnet validator 
     let validator = SubnetRewardsValidator::<T>::get(subnet_id, epoch).ok_or(Error::<T>::InvalidValidator)?;
     
-    log::error!("SubnetRewardsValidator account_id {:?}", account_id);
-    log::error!("SubnetRewardsValidator validator  {:?}", validator);
-
     ensure!(
       account_id == validator,
       Error::<T>::InvalidValidator
@@ -185,58 +195,6 @@ impl<T: Config> Pallet<T> {
   //   Ok(())
   // }
 
-  // /// Blockchain validators choose subnet validators for the epoch to submit consensus data for rewards
-  // pub fn choose_validators(block: u64, epoch_length: u64) {
-  //   // --- Get required epochs for a model to accept consensus data
-  //   let min_required_model_consensus_submit_epochs = MinRequiredSubnetConsensusSubmitEpochs::<T>::get();
-
-  //   // let mut small_rng = SmallRng::seed_from_u64(block);
-
-  //   for (subnet_id, data) in SubnetsData::<T>::iter() {
-  //     let min_subnet_nodes = data.min_nodes;
-  //     // Ensure subnet has passed required epochs to accept submissions and generate consensus and rewards
-  //     // We get the eligible start block
-  //     //
-  //     // We use this here instead of when initializing the subnet or peer in order to keep the required time
-  //     // universal in the case subnets or peers are added before an update to the EpochLength
-  //     //
-  //     // e.g. Can't submit consensus if the following parameters
-  //     //			• subnet initialized		0
-  //     //			• epoch_length 					20
-  //     //			• epochs							  10
-  //     //			• current block 			  199
-  //     //	eligible block is 200
-  //     // 	can't submit on 200, 201 based on is_in_consensus_steps()
-  //     //	can submit between 202-219
-  //     //	199 is not greater than or equal to 200, revert
-  //     //
-  //     // e.g. Can submit consensus if the following parameters
-  //     //			• subnet initialized		0
-  //     //			• epoch_length 						20
-  //     //			• epochs							10
-  //     //			• current block 			205
-  //     //	eligible block is 200
-  //     // 	can't submit on 200, 201 based on is_in_consensus_steps()
-  //     //	can submit between 202-219
-  //     //	205 is not greater than or equal to 200, allow consensus data submission
-  //     //
-  //     if block < Self::get_eligible_epoch_block(
-  //       epoch_length, 
-  //       data.initialized, 
-  //       min_required_model_consensus_submit_epochs
-  //     ) {
-  //       continue
-  //     }
-
-  //     Self::choose_validator(
-  //       block,
-  //       subnet_id,
-  //       min_subnet_nodes,
-  //       0,
-  //     );
-  //   }
-  // }
-
   pub fn choose_validator(
     block: u64,
     subnet_id: u32,
@@ -252,13 +210,9 @@ impl<T: Config> Pallet<T> {
       return
     }
 
-    log::error!("node_sets.len() {:?}", node_sets.len());
-
     let account_ids: Vec<T::AccountId> = node_sets.iter()
       .map(|x| x.0.clone())
       .collect();
-
-    log::error!("account_ids.len() {:?}", account_ids.len());
 
     // --- Get eligible validator
     let validator: Option<T::AccountId> = Self::get_random_account(
@@ -266,8 +220,6 @@ impl<T: Config> Pallet<T> {
       account_ids,
     );
     
-    log::error!("validator {:?}", validator);
-
     // --- Insert validator for next epoch
     if let Some(validator) = validator {
       SubnetRewardsValidator::<T>::insert(subnet_id, epoch, validator);

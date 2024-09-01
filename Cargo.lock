@@ -4547,11 +4547,11 @@ dependencies = [
  "pallet-balances",
  "pallet-grandpa",
  "pallet-insecure-randomness-collective-flip",
- "pallet-model-voting",
  "pallet-multisig",
  "pallet-network",
  "pallet-preimage",
  "pallet-rewards",
+ "pallet-subnet-democracy",
  "pallet-sudo",
  "pallet-timestamp",
  "pallet-transaction-payment",
@@ -4779,8 +4779,8 @@ dependencies = [
  "log",
  "pallet-balances",
  "pallet-insecure-randomness-collective-flip",
- "pallet-model-voting",
  "pallet-network",
+ "pallet-subnet-democracy",
  "pallet-sudo",
  "parity-scale-codec",
  "scale-info",
@@ -4869,24 +4869,6 @@ dependencies = [
  "scale-info",
  "sp-runtime",
  "sp-std",
-]
-
-[[package]]
-name = "pallet-model-voting"
-version = "4.0.0-dev"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "pallet-balances",
- "pallet-insecure-randomness-collective-flip",
- "pallet-network",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
- "sp-io",
- "sp-runtime",
 ]
 
 [[package]]
@@ -4986,6 +4968,24 @@ dependencies = [
  "sp-staking",
  "sp-std",
  "sp-trie",
+]
+
+[[package]]
+name = "pallet-subnet-democracy"
+version = "4.0.0-dev"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-balances",
+ "pallet-insecure-randomness-collective-flip",
+ "pallet-network",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]

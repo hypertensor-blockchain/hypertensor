@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use super::*;
-use crate as pallet_model_voting;
+use crate as pallet_subnet_democracy;
 use frame_support::{
   parameter_types,
   traits::Everything,
@@ -41,7 +41,7 @@ frame_support::construct_runtime!(
     InsecureRandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
     Balances: pallet_balances,
     Network: pallet_network,
-    SubnetVoting: pallet_model_voting,
+    SubnetVoting: pallet_subnet_democracy,
 	}
 );
 

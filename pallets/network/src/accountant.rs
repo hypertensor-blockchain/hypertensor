@@ -216,15 +216,8 @@ impl<T: Config> Pallet<T> {
       max_accountants = node_sets_len;
     }
 
-    log::info!("choose_accountants max_accountants {:?}", max_accountants);
-    log::error!("choose_accountants max_accountants {:?}", max_accountants);
-
     // `-1` is for overflow
     let account_ids_len = account_ids.len() - 1;
-    log::error!("choose_accountants account_ids_len {:?}", account_ids_len);
-    log::info!("choose_accountants account_ids_len {:?}", account_ids_len);
-    log::error!("choose_accountants block {:?}", block);
-    log::info!("choose_accountants block {:?}", block);
 
     // --- Ensure no duplicates
     // let mut unique_accountants: Vec<T::AccountId> = Vec::new();
@@ -242,31 +235,9 @@ impl<T: Config> Pallet<T> {
     for n in 0..max_accountants {
       let rand = rand_index + n % account_ids_len as u32;
       let random_accountant: &T::AccountId = &account_ids[rand as usize];
-      log::error!("choose_accountants rand {:?}", rand);
-      log::info!("choose_accountants rand {:?}", rand);
 
       current_accountants.insert(random_accountant.clone(), false);
     }
-
-    // while !chosen_accountants_complete {
-    //   if current_accountants.len() as u32 >= max_accountants {
-    //     chosen_accountants_complete = true;
-    //     break;
-    //   }
-
-    //   // let rand_index = Self::get_random_number(account_ids_len as u32, block as u32);
-
-    //   // let rand_num = small_rng.next_u32();
-    //   // let rand_index = rand_num % (account_ids.len() as u32);
-    //   log::error!("choose_accountants rand_index {:?}", rand_index);
-    //   log::info!("choose_accountants rand_index {:?}", rand_index);
-
-    //   let random_accountant: &T::AccountId = &account_ids[rand_index as usize];
-
-    //   if !current_accountants.contains_key(random_accountant) {
-    //     current_accountants.insert(random_accountant.clone(), false);
-    //   }
-    // }
 
     CurrentAccountants::<T>::insert(subnet_id, epoch, current_accountants);
   }
@@ -311,8 +282,6 @@ impl<T: Config> Pallet<T> {
 
       let rand_num = small_rng.next_u32();
       let rand_index = rand_num % (account_ids.len() as u32);
-      log::error!("choose_accountants rand_index {:?}", rand_index);
-      log::info!("choose_accountants rand_index {:?}", rand_index);
 
       let random_accountant: &T::AccountId = &account_ids[rand_index as usize];
 

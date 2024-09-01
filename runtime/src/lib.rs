@@ -62,12 +62,7 @@ use sp_runtime::SaturatedConversion;
 /// Import custom pallets.
 pub use pallet_network;
 pub use pallet_multisig;
-pub use pallet_model_voting;
-// pub use pallet_model_voting_v2;
-// pub use pallet_offchain_worker;
-
-// testing
-
+pub use pallet_subnet_democracy;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -381,7 +376,7 @@ impl pallet_rewards::Config for Runtime {
 impl pallet_admin::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NetworkAdminInterface = Network;
-	type SubnetVotingAdminInterface = SubnetVoting;
+	type SubnetDemocracyAdminInterface = SubnetDemocracy;
 }
 
 // scheduler
@@ -484,16 +479,6 @@ impl pallet_preimage::Config for Runtime {
 // 	type VoteLockingPeriod = VoteLockingPeriod;
 // }
 
-// impl pallet_model_voting_v2::Config for Runtime {
-// 	type WeightInfo = pallet_model_voting_v2::weights::SubstrateWeight<Runtime>;
-// 	type RuntimeEvent = RuntimeEvent;
-// 	type Currency = Balances;
-// 	type Polls = Referenda;
-// 	type MaxTurnout = frame_support::traits::TotalIssuanceOf<Balances, Self::AccountId>;
-// 	type MaxVotes = ConstU32<512>;
-// 	type VoteLockingPeriod = VoteLockingPeriod;
-// }
-
 // // referenda
 // parameter_types! {
 // 	pub const AlarmInterval: BlockNumber = 10;
@@ -556,8 +541,8 @@ impl pallet_preimage::Config for Runtime {
 // 	type CancelOrigin = EnsureRoot<AccountId>;
 // 	type KillOrigin = EnsureRoot<AccountId>;
 // 	type Slash = ();
-// 	type Votes = pallet_model_voting_v2::VotesOf<Runtime>;
-// 	type Tally = pallet_model_voting_v2::TallyOf<Runtime>;
+// 	type Votes = pallet_subnet_democracy::VotesOf<Runtime>;
+// 	type Tally = pallet_subnet_democracy::TallyOf<Runtime>;
 // 	type SubmissionDeposit = SubmissionDeposit;
 // 	type MaxQueued = ConstU32<100>;
 // 	type UndecidingTimeout = UndecidingTimeout;
@@ -611,16 +596,22 @@ impl pallet_network::Config for Runtime {
 }
 
 parameter_types! {
+	// Mainnet
 	// pub const VotingPeriod: BlockNumber = DAYS * 21;
 	// pub const EnactmentPeriod: BlockNumber = DAYS * 7;
-	pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
+
+	// Testnet
+	pub const VotingPeriod: BlockNumber = DAYS * 6;
+	pub const EnactmentPeriod: BlockNumber = DAYS * 14;
 
 	// Testing
-	pub const VotingPeriod: BlockNumber = 50; // ~5 minutes
-	pub const EnactmentPeriod: BlockNumber = 30; // ~3 minutes
+	// pub const VotingPeriod: BlockNumber = 50; // ~5 minutes
+	// pub const EnactmentPeriod: BlockNumber = 600; // ~60 minutes
+
+	pub const MinProposalStake: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
 }
 
-impl pallet_model_voting::Config for Runtime {
+impl pallet_subnet_democracy::Config for Runtime {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
 	type SubnetVote = Network;
@@ -645,19 +636,13 @@ construct_runtime!(
 		Balances: pallet_balances,
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
-		// Custom Logic
 		Multisig: pallet_multisig,
 		Authorship: pallet_authorship,
 		Rewards: pallet_rewards,
-		// Scheduler: pallet_scheduler,
-		// Democracy: pallet_democracy,
 		Preimage: pallet_preimage,
-		// Referenda: pallet_referenda,
-		// ConvictionVoting: pallet_conviction_voting,
-		// ConvictionSubnetVoting: pallet_model_voting_v2,
 		Network: pallet_network,
 		Admin: pallet_admin,
-		SubnetVoting: pallet_model_voting,
+		SubnetDemocracy: pallet_subnet_democracy,
 	}
 );
 
@@ -705,7 +690,7 @@ mod benches {
 		[pallet_grandpa, Grandpa]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_model_voting, SubnetVoting]
+		[pallet_subnet_democracy, SubnetDemocracy]
 		[pallet_network, Network]
 	);
 }

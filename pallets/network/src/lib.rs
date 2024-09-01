@@ -108,13 +108,6 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type SubnetInitializationCost: Get<u128>;
-
-		// type OffchainSignature: Verify<Signer = Self::SigningPublicKey> + Parameter;
-
-
-		// type OffchainPublic = <Signature as traits::Verify>::Signer;
-
-		// type SigningPublicKey: IdentifyAccount<AccountId = Self::AccountId>;
 	}
 
 	/// Events for the pallet.
@@ -753,13 +746,8 @@ pub mod pallet {
 	}
 	#[pallet::type_value]
 	pub fn DefaultMinSubnetNodes() -> u32 {
-		// Must be above 4 in order for the interquartile algorithm to work
-		5
+		3
 	}
-	// #[pallet::type_value]
-	// pub fn DefaultMaxSubnetNodes<T: Config>() -> u32 {
-	// 	96
-	// }
 	#[pallet::type_value]
 	pub fn DefaultOptimalSubnets<T: Config>() -> u32 {
 		12
@@ -2290,7 +2278,7 @@ pub mod pallet {
 				Error::<T>::InvalidRemoveOrUpdateSubnetNodeBlock
 			);
 
-			let min_required_peer_consensus_submit_epochs = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
+			let submit_epochs = SubnetNodeClassEpochs::<T>::get(SubnetNodeClass::Submittable);
 
 			// Check if subnet peer is eligible for consensus submission
 			//
@@ -2303,7 +2291,7 @@ pub mod pallet {
 				Self::is_epoch_block_eligible(
 					block, 
 					epoch_length, 
-					min_required_peer_consensus_submit_epochs, 
+					submit_epochs, 
 					subnet_node.initialized
 				),
 				Error::<T>::NodeConsensusSubmitEpochNotReached
@@ -2339,21 +2327,14 @@ pub mod pallet {
 		/// Unstaking must be done seperately
 		#[pallet::call_index(3)]
 		#[pallet::weight(T::WeightInfo::remove_subnet_node())]
-		// #[pallet::weight({0})]
 		pub fn remove_subnet_node(
 			origin: OriginFor<T>, 
 			subnet_id: u32, 
-			// subnet_path: Vec<u8>, 
 		) -> DispatchResult {
 			let account_id: T::AccountId = ensure_signed(origin)?;
 
 			let epoch_length: u64 = T::EpochLength::get();
 			let block: u64 = Self::get_current_block_as_u64();
-
-			// ensure!(
-			// 	!Self::is_in_consensus_steps(block, epoch_length),
-			// 	Error::<T>::InvalidSubmitEpochLength
-			// );
 
 			// --- Ensure subnet exists
 			ensure!(
@@ -2366,34 +2347,7 @@ pub mod pallet {
 				Error::<T>::SubnetNodeNotExist
 			);
 
-			// @todo: Ensure peer is not a proposer, voter, or challenger in a dishonesty proposal
-
-			let subnet_node = SubnetNodesData::<T>::get(subnet_id, account_id.clone());
-
-			let min_required_consensus_inclusion_epochs = MinRequiredNodeConsensusInclusionEpochs::<T>::get();
-
-			// Check if subnet peer is eligible to be included in consensus data submissions
-			let is_included: bool = block >= Self::get_eligible_epoch_block(
-				epoch_length, 
-				subnet_node.initialized, 
-				min_required_consensus_inclusion_epochs
-			);
-
-			// If a subnet peer can be included in consensus they must wait until `can_remove_or_update_subnet_node()` is true
-			// to self-remove their subnet peer
-			//
-			// If a subnet peer isn't included in consensus then removing won't disrupt anything
-			if is_included {
-				// Ensure updates are happening before consensus submissions
-				// Ensure removing during subnet peer removal range of epoch
-				// This ensures subnet peers submitting consensus data will not be interupted
-				// if a subnet peer exits on a block another peer is submitting data on as it can
-				// revert the subnet peers submission due to data array length requirements
-				ensure!(
-					Self::can_remove_or_update_subnet_node(block, epoch_length),
-					Error::<T>::InvalidRemoveOrUpdateSubnetNodeBlock
-				);
-			}
+			// TODO: Track removal of subnet nodes following validator consensus data submission per epoch
 
 			// We don't check consensus steps here because a subnet peers stake isn't included in calculating rewards 
 			// that hasn't reached their consensus submission epoch yet
@@ -2608,8 +2562,6 @@ pub mod pallet {
 				Some(block_added) => *block_added,
 				None => 0,
 			};
-
-			log::error!("block_added {:?}", block_added);
 
 			// We don't ensure! if the account add block is zero 
 			// If they have no stake, it will be ensure!'d in the delegate_staking.rs
@@ -3118,20 +3070,21 @@ pub mod pallet {
 
 		// }
 
-		fn offchain_worker(block_number: BlockNumberFor<T>) {
+		// fn offchain_worker(block_number: BlockNumberFor<T>) {
 			// designated for testnet v2.0
 			//
 			// Call peers at random to ensure subnet is running
 			// Submit a prompt/hash/code/etc. and expect specific response
 			// Increment errors or wrong responses to both subnets and peers
 			// ...
-		}
+		// }
 	}
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
 		pub subnet_path: Vec<u8>,
+		pub memory_mb: u128,
 		pub subnet_nodes: Vec<(T::AccountId, Vec<u8>, PeerId)>,
 		pub accounts: Vec<T::AccountId>,
 		pub blank: Option<T::AccountId>,
@@ -3144,16 +3097,6 @@ pub mod pallet {
 			SubnetNodeClassEpochs::<T>::insert(SubnetNodeClass::Included, 4);
 			SubnetNodeClassEpochs::<T>::insert(SubnetNodeClass::Submittable, 6);
 			SubnetNodeClassEpochs::<T>::insert(SubnetNodeClass::Accountant, 8);
-
-			// ModelTypes::<T>::insert(0, ModelType {
-			// 	id: 0,
-			// 	title: "LLAMA".into(),
-			// 	precision: 4,
-			// 	default_memory: 70,
-			// 	gib_b: u128,
-			// 	rewards_per_million: 1_077_852_300_000_000,
-			// 	rewards_per_node: u128,
-			// });
 
 			let min_required_model_consensus_submit_epochs: u64 = MinRequiredSubnetConsensusSubmitEpochs::<T>::get();
 			let min_required_peer_consensus_submit_epochs: u64 = MinRequiredNodeConsensusSubmitEpochs::<T>::get();
@@ -3177,23 +3120,34 @@ pub mod pallet {
 				}
 			}
 
-			return;
+			return; // remove this when testing subnets to pre-initialize subnet if required for testing
 
 			let subnet_id = 1;
+
+			let base_node_memory: u128 = BaseSubnetNodeMemoryMB::<T>::get();
+
+			// --- Get min nodes based on default memory settings
+			let real_min_subnet_nodes: u128 = self.memory_mb.clone() / base_node_memory;
+			let mut min_subnet_nodes: u32 = MinSubnetNodes::<T>::get();
+			if real_min_subnet_nodes as u32 > min_subnet_nodes {
+				min_subnet_nodes = real_min_subnet_nodes as u32;
+			}
+				
+			let target_subnet_nodes: u32 = (min_subnet_nodes as u128).saturating_mul(TargetSubnetNodesMultiplier::<T>::get()).saturating_div(10000) as u32 + min_subnet_nodes;
 
 			let model_data = SubnetData {
 				id: subnet_id,
 				path: self.subnet_path.clone(),
-				min_nodes: 5,
-				target_nodes: 5,
-				memory_mb: 50000,
+				min_nodes: min_subnet_nodes,
+				target_nodes: target_subnet_nodes,
+				memory_mb: self.memory_mb.clone(),
 				initialized: 0,
 			};
 
 			// Activate subnet
 			let pre_subnet_data = PreSubnetData {
 				path: self.subnet_path.clone(),
-				memory_mb: 50000,
+				memory_mb: self.memory_mb.clone(),
 			};
 		
 			let vote_subnet_data = VoteSubnetData {

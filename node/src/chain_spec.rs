@@ -325,15 +325,16 @@ fn testnet_genesis(
 		network: {
 			let mut peer_index: u8 = 0;
 			NetworkConfig {
-			subnet_path: "petals-team/StableBeluga2".into(),
-			subnet_nodes: endowed_accounts.iter().cloned().map(|k| {
-				peer_index += 1;
-				(
-					k, 
-					"petals-team/StableBeluga2".into(),
-					peer(peer_index),
-				)
-			}).collect(),
+				subnet_path: "bigscience/bloom-560m".into(),
+				memory_mb: 560,
+				subnet_nodes: endowed_accounts.iter().cloned().map(|k| {
+					peer_index += 1;
+					(
+						k, 
+						"bigscience/bloom-560m".into(),
+						peer(peer_index),
+					)
+				}).collect(),
 			accounts: endowed_accounts.iter().cloned().map(|k| k).collect(),
 			blank: {
 				Some(root_key.clone())
@@ -377,6 +378,52 @@ fn vitalik_genesis(
 		network: {
 			NetworkConfig {
 				subnet_path: "bigscience/bloom-560m".into(),
+				memory_mb: 560,
+				subnet_nodes: vec![],
+				accounts: vec![],
+				blank: {
+					Some(root_key.clone())
+				},
+			}
+		},
+	}
+}
+
+fn gavin_genesis(
+	wasm_binary: &[u8],
+	initial_authorities: Vec<(AuraId, GrandpaId)>,
+	root_key: AccountId,
+	endowed_accounts: Vec<AccountId>,
+) -> RuntimeGenesisConfig {
+	RuntimeGenesisConfig {
+		system: SystemConfig {
+			// Add Wasm runtime to storage.
+			code: wasm_binary.to_vec(),
+			..Default::default()
+		},
+		balances: BalancesConfig {
+			// Configure endowed accounts with initial balance of 1 << 60.
+			balances: {
+				endowed_accounts.iter().cloned().map(|k| (k, 10000000000000000000000)).collect()
+			},
+		},
+		aura: AuraConfig {
+			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
+		},
+		grandpa: GrandpaConfig {
+			authorities: initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect(),
+			..Default::default()
+		},
+		sudo: SudoConfig {
+			// Assign network admin rights.
+			key: Some(root_key.clone()),
+		},
+		// democracy: DemocracyConfig::default(),
+		transaction_payment: Default::default(),
+		network: {
+			NetworkConfig {
+				subnet_path: "bigscience/bloom-560m".into(),
+				memory_mb: 560,
 				subnet_nodes: vec![],
 				accounts: vec![],
 				blank: {
